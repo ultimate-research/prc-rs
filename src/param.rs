@@ -1,3 +1,5 @@
+pub const MAGIC: &str = "paracobn";
+
 pub enum ParamKind { //index starts at 1
     Bool(bool),
     I8(i8),
