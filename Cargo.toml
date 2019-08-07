@@ -4,4 +4,8 @@ version = "0.1.0"
 authors = ["BenHall-7 <benjaminjahall@gmail.com>"]
 edition = "2018"
 
+[lib]
+name = "lib"
+path = "src/lib.rs"
+
 [dependencies]
