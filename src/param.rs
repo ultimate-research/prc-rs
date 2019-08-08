@@ -1,4 +1,4 @@
-pub const MAGIC: &[u8; 8] = b"paracobn";
+pub const MAGIC: u64 = 0x6e626f6361726170;//paracobn
 
 #[derive(Debug)]
 pub enum ParamKind { //index starts at 1

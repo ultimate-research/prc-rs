@@ -6,8 +6,32 @@ struct Disassembler {
     HashStart: u32,
     RefStart: u32,
     ParamStart: u32,
-    HashTable: [u64],
+    HashTable: Vec<u64>,
     //ref table map, to reduce excessive reads from ref section
+}
+
+pub fn disassemble(mut cursor: io::Cursor<&[u8]>) -> Result<param::ParamKind, String> {
+    cursor.set_position(0);
+    assert_eq!(param::MAGIC, cursor.read_u64::<LittleEndian>().unwrap());
+    let hashsize = cursor.read_u32::<LittleEndian>().unwrap();
+    let hashnum = (hashsize / 8) as usize;
+    let refsize = cursor.read_u32::<LittleEndian>().unwrap();
+    let mut d = Disassembler {
+        HashStart: 10,
+        RefStart: 10 + hashsize,
+        ParamStart: 10 + hashsize + refsize,
+        HashTable: Vec::with_capacity(hashnum)
+    };
+    for _ in 1..hashnum {
+        d.HashTable.push(cursor.read_u64::<LittleEndian>().unwrap())
+    }
+    cursor.set_position(d.ParamStart as u64);
+    let first_byte = cursor.read_u8().unwrap();
+    if first_byte != 12 {
+        return Err(String::from("param file does not contain a root"));
+    }
+    cursor.set_position(cursor.position() - 1);
+    d.read_param(cursor)
 }
 
 impl Disassembler {
@@ -67,8 +91,4 @@ impl Disassembler {
             _ => Err(format!("encountered invalid param number at position: {}", cursor.position() - 1))
         }
     }
-}
-
-pub fn disassemble(cursor: io::Cursor<&[u8]>) -> Result<param::ParamKind, String> {
-    Err(String::from("unimplemented function"))
 }
