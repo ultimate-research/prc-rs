@@ -1,5 +1,8 @@
-pub const MAGIC: &str = "paracobn";
+use crate::hash40;
 
+pub const MAGIC: &[u8; 8] = b"paracobn";
+
+#[derive(Debug)]
 pub enum ParamKind { //index starts at 1
     Bool(bool),
     I8(i8),
