@@ -114,6 +114,7 @@ impl Disassembler {
                 let size = cursor.read_u32::<LittleEndian>().unwrap() as usize;
                 let refpos = cursor.read_u32::<LittleEndian>().unwrap();
 
+                //TODO: store t into BTreeMap to remove duplicate reads to the ref_tables
                 let mut t: Vec<(u32, u32)> = Vec::with_capacity(size);
                 cursor.set_position((self.ref_start + refpos) as u64);
                 for _ in 1..size {
