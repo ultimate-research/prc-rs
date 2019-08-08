@@ -1,5 +1,3 @@
-use crate::hash40;
-
 pub const MAGIC: &[u8; 8] = b"paracobn";
 
 #[derive(Debug)]
