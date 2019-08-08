@@ -10,7 +10,7 @@ struct Disassembler {
     //ref table map, to reduce excessive reads from ref section
 }
 
-pub fn disassemble(mut cursor: io::Cursor<&[u8]>) -> Result<param::ParamKind, String> {
+pub fn disassemble(cursor: &mut io::Cursor<&[u8]>) -> Result<param::ParamKind, String> {
     cursor.set_position(0);
     assert_eq!(param::MAGIC, cursor.read_u64::<LittleEndian>().unwrap());
     let hashsize = cursor.read_u32::<LittleEndian>().unwrap();
@@ -35,7 +35,7 @@ pub fn disassemble(mut cursor: io::Cursor<&[u8]>) -> Result<param::ParamKind, St
 }
 
 impl Disassembler {
-    fn read_param(&self, mut cursor: io::Cursor<&[u8]>) -> Result<param::ParamKind, String> {
+    fn read_param(&self, cursor: &mut io::Cursor<&[u8]>) -> Result<param::ParamKind, String> {
         match cursor.read_u8().unwrap() {
             1 => {
                 let val = cursor.read_u8().unwrap();
@@ -92,7 +92,7 @@ impl Disassembler {
                 let size = cursor.read_u32::<LittleEndian>().unwrap();
 
                 let mut offsets: Vec<u32> = Vec::new();
-                for _ in 1..size { offsets.push(cursor.read_u32::<LittleEndian>().unwrap()) }
+                for _ in 1..size { offsets.push(cursor.read_u32::<LittleEndian>().unwrap()); }
                 
                 let mut params: Vec<param::ParamKind> = Vec::new();
                 for offset in offsets {
