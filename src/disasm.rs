@@ -1,6 +1,6 @@
 use crate::param;
+use byteorder::{LittleEndian, ReadBytesExt};
 use std::io;
-use byteorder::{LittleEndian,ReadBytesExt};
 
 struct Disassembler {
     hash_start: u32,
@@ -20,10 +20,11 @@ pub fn disassemble(cursor: &mut io::Cursor<&[u8]>) -> Result<param::ParamKind, S
         hash_start: 10,
         ref_start: 10 + hashsize,
         param_start: 10 + hashsize + refsize,
-        hash_table: Vec::with_capacity(hashnum)
+        hash_table: Vec::with_capacity(hashnum),
     };
     for _ in 1..hashnum {
-        d.hash_table.push(cursor.read_u64::<LittleEndian>().unwrap())
+        d.hash_table
+            .push(cursor.read_u64::<LittleEndian>().unwrap())
     }
     cursor.set_position(d.param_start as u64);
     let first_byte = cursor.read_u8().unwrap();
@@ -40,7 +41,7 @@ impl Disassembler {
             1 => {
                 let val = cursor.read_u8().unwrap();
                 Ok(param::ParamKind::Bool(val != 0))
-            },
+            }
             2 => {
                 let val = cursor.read_i8().unwrap();
                 Ok(param::ParamKind::I8(val))
@@ -78,11 +79,15 @@ impl Disassembler {
                 //remembering where we were is actually unnecessary
                 //let curpos = cursor.position();
                 cursor.set_position((self.ref_start + strpos) as u64);
-                let mut val = String::new(); let mut next: u8;
-                loop { next = cursor.read_u8().unwrap();
+                let mut val = String::new();
+                let mut next: u8;
+                loop {
+                    next = cursor.read_u8().unwrap();
                     if next != 0 {
                         val.push(next as char);
-                    } else { break; }
+                    } else {
+                        break;
+                    }
                 }
                 //cursor.set_position(curpos);
                 Ok(param::ParamKind::Str(val))
@@ -92,8 +97,10 @@ impl Disassembler {
                 let size = cursor.read_u32::<LittleEndian>().unwrap();
 
                 let mut offsets: Vec<u32> = Vec::new();
-                for _ in 1..size { offsets.push(cursor.read_u32::<LittleEndian>().unwrap()); }
-                
+                for _ in 1..size {
+                    offsets.push(cursor.read_u32::<LittleEndian>().unwrap());
+                }
+
                 let mut params: Vec<param::ParamKind> = Vec::new();
                 for offset in offsets {
                     cursor.set_position(relpos + offset as u64);
@@ -102,7 +109,10 @@ impl Disassembler {
                 Ok(param::ParamKind::List(params))
             }
             12 => Err(String::from("unimplemented param type: struct")),
-            _ => Err(format!("encountered invalid param number at position: {}", cursor.position() - 1))
+            _ => Err(format!(
+                "encountered invalid param number at position: {}",
+                cursor.position() - 1
+            )),
         }
     }
 }

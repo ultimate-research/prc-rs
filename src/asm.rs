@@ -1,6 +1,4 @@
 use crate::param;
-use byteorder::{LittleEndian,WriteBytesExt};
+use byteorder::{LittleEndian, WriteBytesExt};
 
-pub struct Assembler {
-    
-}
+pub struct Assembler {}

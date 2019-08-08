@@ -1,4 +1,4 @@
-pub mod param;
-pub mod hash40;
 mod asm;
 mod disasm;
+pub mod hash40;
+pub mod param;

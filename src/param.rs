@@ -1,7 +1,8 @@
-pub const MAGIC: u64 = 0x6e626f6361726170;//paracobn
+pub const MAGIC: u64 = 0x6e626f6361726170; //paracobn
 
 #[derive(Debug)]
-pub enum ParamKind { //index starts at 1
+pub enum ParamKind {
+    //index starts at 1
     Bool(bool),
     I8(i8),
     U8(u8),
@@ -13,5 +14,5 @@ pub enum ParamKind { //index starts at 1
     Hash(u64),
     Str(String),
     List(Vec<ParamKind>),
-    Struct(Vec<(u64, ParamKind)>)
+    Struct(Vec<(u64, ParamKind)>),
 }

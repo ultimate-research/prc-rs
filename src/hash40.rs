@@ -11,6 +11,6 @@ pub fn len(hash: u64) -> u8 {
 pub fn label(hash: u64, labels: HashMap<u64, &str>) -> String {
     match labels.get(&hash) {
         Some(x) => String::from(*x),
-        None    => format!("{:#012x}",hash)
+        None => format!("{:#012x}", hash),
     }
 }
