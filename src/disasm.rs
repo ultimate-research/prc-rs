@@ -1,13 +1,14 @@
 use crate::param;
 use byteorder::{LittleEndian, ReadBytesExt};
+use std::collections::BTreeMap;
 use std::io;
 
 struct Disassembler {
-    hash_start: u32,
     ref_start: u32,
     param_start: u32,
     hash_table: Vec<u64>,
-    //ref table map, to reduce excessive reads from ref section
+    //BTreeMap<offset, Vec<(hash_index, param_offset)>>
+    //ref_table: BTreeMap<u32, Vec<(u32, u32)>>,
 }
 
 pub fn disassemble(cursor: &mut io::Cursor<&[u8]>) -> Result<param::ParamKind, String> {
@@ -17,10 +18,10 @@ pub fn disassemble(cursor: &mut io::Cursor<&[u8]>) -> Result<param::ParamKind, S
     let hashnum = (hashsize / 8) as usize;
     let refsize = cursor.read_u32::<LittleEndian>().unwrap();
     let mut d = Disassembler {
-        hash_start: 10,
         ref_start: 10 + hashsize,
         param_start: 10 + hashsize + refsize,
         hash_table: Vec::with_capacity(hashnum),
+        //ref_table: BTreeMap::new()
     };
     for _ in 1..hashnum {
         d.hash_table
@@ -93,7 +94,7 @@ impl Disassembler {
                 Ok(param::ParamKind::Str(val))
             }
             11 => {
-                let relpos = cursor.position() - 1;
+                let pos = cursor.position() - 1;
                 let size = cursor.read_u32::<LittleEndian>().unwrap();
 
                 let mut offsets: Vec<u32> = Vec::new();
@@ -103,12 +104,34 @@ impl Disassembler {
 
                 let mut params: Vec<param::ParamKind> = Vec::new();
                 for offset in offsets {
-                    cursor.set_position(relpos + offset as u64);
+                    cursor.set_position(pos + offset as u64);
                     params.push(self.read_param(cursor).unwrap());
                 }
                 Ok(param::ParamKind::List(params))
             }
-            12 => Err(String::from("unimplemented param type: struct")),
+            12 => {
+                let pos = cursor.position() - 1;
+                let size = cursor.read_u32::<LittleEndian>().unwrap() as usize;
+                let refpos = cursor.read_u32::<LittleEndian>().unwrap();
+
+                let mut t: Vec<(u32, u32)> = Vec::with_capacity(size);
+                cursor.set_position((self.ref_start + refpos) as u64);
+                for _ in 1..size {
+                    t.push((
+                        cursor.read_u32::<LittleEndian>().unwrap(),
+                        cursor.read_u32::<LittleEndian>().unwrap(),
+                    ));
+                }
+                t.sort_by(|a, b| a.0.cmp(&b.0));
+
+                let mut params: Vec<(u64, param::ParamKind)> = Vec::with_capacity(size);
+                for pair in t {
+                    let hash = self.hash_table[pair.0 as usize];
+                    cursor.set_position(pos + pair.1 as u64);
+                    params.push((hash, self.read_param(cursor).unwrap()))
+                }
+                Ok(param::ParamKind::Struct(params))
+            }
             _ => Err(format!(
                 "encountered invalid param number at position: {}",
                 cursor.position() - 1
