@@ -3,10 +3,10 @@ use std::io;
 use byteorder::{LittleEndian,ReadBytesExt};
 
 struct Disassembler {
-    HashStart: u32,
-    RefStart: u32,
-    ParamStart: u32,
-    HashTable: Vec<u64>,
+    hash_start: u32,
+    ref_start: u32,
+    param_start: u32,
+    hash_table: Vec<u64>,
     //ref table map, to reduce excessive reads from ref section
 }
 
@@ -17,15 +17,15 @@ pub fn disassemble(cursor: &mut io::Cursor<&[u8]>) -> Result<param::ParamKind, S
     let hashnum = (hashsize / 8) as usize;
     let refsize = cursor.read_u32::<LittleEndian>().unwrap();
     let mut d = Disassembler {
-        HashStart: 10,
-        RefStart: 10 + hashsize,
-        ParamStart: 10 + hashsize + refsize,
-        HashTable: Vec::with_capacity(hashnum)
+        hash_start: 10,
+        ref_start: 10 + hashsize,
+        param_start: 10 + hashsize + refsize,
+        hash_table: Vec::with_capacity(hashnum)
     };
     for _ in 1..hashnum {
-        d.HashTable.push(cursor.read_u64::<LittleEndian>().unwrap())
+        d.hash_table.push(cursor.read_u64::<LittleEndian>().unwrap())
     }
-    cursor.set_position(d.ParamStart as u64);
+    cursor.set_position(d.param_start as u64);
     let first_byte = cursor.read_u8().unwrap();
     if first_byte != 12 {
         return Err(String::from("param file does not contain a root"));
@@ -70,14 +70,14 @@ impl Disassembler {
                 Ok(param::ParamKind::Float(val))
             }
             9 => {
-                let val = self.HashTable[cursor.read_i32::<LittleEndian>().unwrap() as usize];
+                let val = self.hash_table[cursor.read_i32::<LittleEndian>().unwrap() as usize];
                 Ok(param::ParamKind::Hash(val))
             }
             10 => {
                 let strpos = cursor.read_u32::<LittleEndian>().unwrap();
                 //remembering where we were is actually unnecessary
                 //let curpos = cursor.position();
-                cursor.set_position((self.RefStart + strpos) as u64);
+                cursor.set_position((self.ref_start + strpos) as u64);
                 let mut val = String::new(); let mut next: u8;
                 loop { next = cursor.read_u8().unwrap();
                     if next != 0 {
