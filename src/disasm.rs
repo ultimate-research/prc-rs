@@ -75,7 +75,8 @@ impl Disassembler {
             }
             10 => {
                 let strpos = cursor.read_u32::<LittleEndian>().unwrap();
-                let curpos = cursor.position();
+                //remembering where we were is actually unnecessary
+                //let curpos = cursor.position();
                 cursor.set_position((self.RefStart + strpos) as u64);
                 let mut val = String::new(); let mut next: u8;
                 loop { next = cursor.read_u8().unwrap();
@@ -83,10 +84,23 @@ impl Disassembler {
                         val.push(next as char);
                     } else { break; }
                 }
-                cursor.set_position(curpos);
+                //cursor.set_position(curpos);
                 Ok(param::ParamKind::Str(val))
             }
-            11 => Err(String::from("unimplemented param type: list")),
+            11 => {
+                let relpos = cursor.position() - 1;
+                let size = cursor.read_u32::<LittleEndian>().unwrap();
+
+                let mut offsets: Vec<u32> = Vec::new();
+                for _ in 1..size { offsets.push(cursor.read_u32::<LittleEndian>().unwrap()) }
+                
+                let mut params: Vec<param::ParamKind> = Vec::new();
+                for offset in offsets {
+                    cursor.set_position(relpos + offset as u64);
+                    params.push(self.read_param(cursor).unwrap());
+                }
+                Ok(param::ParamKind::List(params))
+            }
             12 => Err(String::from("unimplemented param type: struct")),
             _ => Err(format!("encountered invalid param number at position: {}", cursor.position() - 1))
         }
