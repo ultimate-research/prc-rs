@@ -114,23 +114,19 @@ impl Disassembler {
                 let size = cursor.read_u32::<LittleEndian>().unwrap() as usize;
                 let refpos = cursor.read_u32::<LittleEndian>().unwrap();
 
-                let t: &Vec<(u32, u32)>;
-                match self.ref_table.get(&refpos) {
-                    Some(x) => t = x,
-                    None => {
-                        let mut new_table: Vec<(u32, u32)> = Vec::with_capacity(size);
-                        cursor.set_position((self.ref_start + refpos) as u64);
-                        for _ in 0..size {
-                            new_table.push((
-                                cursor.read_u32::<LittleEndian>().unwrap(),
-                                cursor.read_u32::<LittleEndian>().unwrap(),
-                            ));
-                        }
-                        new_table.sort_by(|a, b| a.0.cmp(&b.0));
-                        t = &new_table;
-                        self.ref_table.insert(refpos, new_table);
+                if !self.ref_table.contains_key(&refpos) {
+                    let mut new_table: Vec<(u32, u32)> = Vec::with_capacity(size);
+                    cursor.set_position((self.ref_start + refpos) as u64);
+                    for _ in 0..size {
+                        new_table.push((
+                            cursor.read_u32::<LittleEndian>().unwrap(),
+                            cursor.read_u32::<LittleEndian>().unwrap(),
+                        ));
                     }
+                    new_table.sort_by(|a, b| a.0.cmp(&b.0));
+                    self.ref_table.insert(refpos, new_table);
                 }
+                let t: &Vec<(u32, u32)> = self.ref_table.get(&refpos).unwrap();
 
                 let mut params: Vec<(u64, param::ParamKind)> = Vec::with_capacity(size);
                 for &pair in t {
