@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 pub const MAGIC: u64 = 0x6e626f6361726170; //paracobn
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ParamKind {
     //index starts at 1
     Bool(bool),

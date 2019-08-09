@@ -1,29 +1,29 @@
 use crate::param;
 use byteorder::{LittleEndian, ReadBytesExt};
-use std::collections::BTreeMap;
+//use std::collections::BTreeMap;
 use std::io;
 
 struct Disassembler {
     ref_start: u32,
     param_start: u32,
     hash_table: Vec<u64>,
-    //BTreeMap<offset, Vec<(hash_index, param_offset)>>
-    //ref_table: BTreeMap<u32, Vec<(u32, u32)>>,
+    //ref tables in the format <offset, Vec<(hash_index, param_offset)>>
+    //BTreeMap<u32, Vec<(u32, u32)>>,
 }
 
-pub fn disassemble(cursor: &mut io::Cursor<&[u8]>) -> Result<param::ParamKind, String> {
+pub fn disassemble(cursor: &mut io::Cursor<Vec<u8>>) -> Result<param::ParamKind, String> {
     cursor.set_position(0);
     assert_eq!(param::MAGIC, cursor.read_u64::<LittleEndian>().unwrap());
     let hashsize = cursor.read_u32::<LittleEndian>().unwrap();
     let hashnum = (hashsize / 8) as usize;
     let refsize = cursor.read_u32::<LittleEndian>().unwrap();
     let mut d = Disassembler {
-        ref_start: 10 + hashsize,
-        param_start: 10 + hashsize + refsize,
+        ref_start: 0x10 + hashsize,
+        param_start: 0x10 + hashsize + refsize,
         hash_table: Vec::with_capacity(hashnum),
         //ref_table: BTreeMap::new()
     };
-    for _ in 1..hashnum {
+    for _ in 0..hashnum {
         d.hash_table
             .push(cursor.read_u64::<LittleEndian>().unwrap())
     }
@@ -37,7 +37,7 @@ pub fn disassemble(cursor: &mut io::Cursor<&[u8]>) -> Result<param::ParamKind, S
 }
 
 impl Disassembler {
-    fn read_param(&self, cursor: &mut io::Cursor<&[u8]>) -> Result<param::ParamKind, String> {
+    fn read_param(&self, cursor: &mut io::Cursor<Vec<u8>>) -> Result<param::ParamKind, String> {
         match cursor.read_u8().unwrap() {
             1 => {
                 let val = cursor.read_u8().unwrap();
@@ -98,7 +98,7 @@ impl Disassembler {
                 let size = cursor.read_u32::<LittleEndian>().unwrap();
 
                 let mut offsets: Vec<u32> = Vec::new();
-                for _ in 1..size {
+                for _ in 0..size {
                     offsets.push(cursor.read_u32::<LittleEndian>().unwrap());
                 }
 
@@ -117,7 +117,7 @@ impl Disassembler {
                 //TODO: store t into BTreeMap to remove duplicate reads to the ref_tables
                 let mut t: Vec<(u32, u32)> = Vec::with_capacity(size);
                 cursor.set_position((self.ref_start + refpos) as u64);
-                for _ in 1..size {
+                for _ in 0..size {
                     t.push((
                         cursor.read_u32::<LittleEndian>().unwrap(),
                         cursor.read_u32::<LittleEndian>().unwrap(),
