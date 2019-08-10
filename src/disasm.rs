@@ -21,7 +21,7 @@ pub fn disassemble(cursor: &mut io::Cursor<Vec<u8>>) -> Result<param::ParamKind,
         ref_start: 0x10 + hashsize,
         param_start: 0x10 + hashsize + refsize,
         hash_table: Vec::with_capacity(hashnum),
-        ref_table: BTreeMap::new()
+        ref_table: BTreeMap::new(),
     };
     for _ in 0..hashnum {
         d.hash_table
@@ -126,10 +126,10 @@ impl Disassembler {
                     new_table.sort_by(|a, b| a.0.cmp(&b.0));
                     self.ref_table.insert(refpos, new_table);
                 }
-                let t: &Vec<(u32, u32)> = self.ref_table.get(&refpos).unwrap();
+                let t = self.ref_table.get(&refpos).unwrap().to_owned();
 
                 let mut params: Vec<(u64, param::ParamKind)> = Vec::with_capacity(size);
-                for &pair in t {
+                for pair in t {
                     let hash = self.hash_table[pair.0 as usize];
                     cursor.set_position(pos + pair.1 as u64);
                     params.push((hash, self.read_param(cursor).unwrap()))
