@@ -112,16 +112,16 @@ fn read_param(cursor: &mut Cursor<Vec<u8>>, fd: &mut FileData) -> Result<param::
             let pos = cursor.position() - 1;
             let size = cursor.read_u32::<LittleEndian>()?;
 
-            let mut offsets = Vec::<u32>::with_capacity(size as usize);
-            for _ in 0..size {
-                offsets.push(cursor.read_u32::<LittleEndian>()?);
-            }
+            let params = (0..size)
+                    .map(|_| cursor.read_u32::<LittleEndian>())
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .map(|offset|{
+                        cursor.set_position(pos + offset as u64);
+                        read_param(cursor, fd)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-            let mut params = Vec::<param::ParamKind>::with_capacity(size as usize);
-            for offset in offsets {
-                cursor.set_position(pos + offset as u64);
-                params.push(read_param(cursor, fd)?);
-            }
             Ok(param::ParamKind::List(params))
         }
         12 => {
