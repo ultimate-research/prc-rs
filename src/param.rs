@@ -1,6 +1,7 @@
+use hash40::Hash40;
 use serde::{Deserialize, Serialize};
 
-pub const MAGIC: u64 = 0x6e626f6361726170; //paracobn
+pub const MAGIC: &[u8; 8] = b"paracobn"; //paracobn
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ParamKind {
@@ -13,8 +14,8 @@ pub enum ParamKind {
     I32(i32),
     U32(u32),
     Float(f32),
-    Hash(u64),
+    Hash(Hash40),
     Str(String),
     List(Vec<ParamKind>),
-    Struct(Vec<(u64, ParamKind)>),
+    Struct(Vec<(Hash40, ParamKind)>),
 }
