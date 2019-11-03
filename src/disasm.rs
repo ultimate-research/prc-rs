@@ -141,14 +141,20 @@ fn read_param(cursor: &mut Cursor<Vec<u8>>, fd: &mut FileData) -> Result<param::
                 new_table.sort_by(|a, b| a.0.cmp(&b.0));
                 fd.ref_tables.insert(refpos, RefTable(new_table));
             }
-            let t = fd.ref_tables.get(&refpos).unwrap().to_owned();
 
-            let mut params: Vec<(Hash40, param::ParamKind)> = Vec::with_capacity(size);
-            for pair in t.0 {
-                let hash = fd.hash_table[pair.0 as usize];
-                cursor.set_position(pos + pair.1 as u64);
-                params.push((hash, read_param(cursor, fd).unwrap()))
-            }
+            let &RefTable(ref table) = fd.ref_tables.get(&refpos).unwrap();
+
+            let params = table.iter()
+                .map(|&(hash_index, offset)| (hash_index as usize, offset as u64))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|(hash_index, offset)|{
+                    let hash = fd.hash_table[hash_index];
+                    cursor.set_position(pos + offset);
+                    (hash, read_param(cursor, fd).unwrap())
+                })
+                .collect::<Vec<(Hash40, param::ParamKind)>>();
+
             Ok(param::ParamKind::Struct(params))
         }
         _ => Err(Error::new(
