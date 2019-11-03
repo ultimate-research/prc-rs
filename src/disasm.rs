@@ -130,15 +130,14 @@ fn read_param(cursor: &mut Cursor<Vec<u8>>, fd: &mut FileData) -> Result<param::
             let refpos = cursor.read_u32::<LittleEndian>().unwrap();
 
             if !fd.ref_tables.contains_key(&refpos) {
-                let mut new_table: Vec<(u32, u32)> = Vec::with_capacity(size);
                 cursor.set_position((fd.ref_start + refpos) as u64);
-                for _ in 0..size {
-                    new_table.push((
-                        cursor.read_u32::<LittleEndian>().unwrap(),
-                        cursor.read_u32::<LittleEndian>().unwrap(),
-                    ));
-                }
-                new_table.sort_by(|a, b| a.0.cmp(&b.0));
+                let mut new_table = (0..size)
+                                    .map(|_|(
+                                        cursor.read_u32::<LittleEndian>().unwrap(),
+                                        cursor.read_u32::<LittleEndian>().unwrap()
+                                    ))
+                                    .collect::<Vec<_>>();
+                new_table.sort_by_key(|a| a.0);
                 fd.ref_tables.insert(refpos, RefTable(new_table));
             }
 
