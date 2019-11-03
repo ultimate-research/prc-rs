@@ -112,16 +112,16 @@ fn read_param(cursor: &mut Cursor<Vec<u8>>, fd: &mut FileData) -> Result<param::
             let pos = cursor.position() - 1;
             let size = cursor.read_u32::<LittleEndian>()?;
 
-            let mut offsets = Vec::<u32>::with_capacity(size as usize);
-            for _ in 0..size {
-                offsets.push(cursor.read_u32::<LittleEndian>()?);
-            }
+            let params = (0..size)
+                    .map(|_| cursor.read_u32::<LittleEndian>())
+                    .collect::<Result<Vec<_>, _>>()?
+                    .into_iter()
+                    .map(|offset|{
+                        cursor.set_position(pos + offset as u64);
+                        read_param(cursor, fd)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-            let mut params = Vec::<param::ParamKind>::with_capacity(size as usize);
-            for offset in offsets {
-                cursor.set_position(pos + offset as u64);
-                params.push(read_param(cursor, fd)?);
-            }
             Ok(param::ParamKind::List(params))
         }
         12 => {
@@ -130,25 +130,30 @@ fn read_param(cursor: &mut Cursor<Vec<u8>>, fd: &mut FileData) -> Result<param::
             let refpos = cursor.read_u32::<LittleEndian>().unwrap();
 
             if !fd.ref_tables.contains_key(&refpos) {
-                let mut new_table: Vec<(u32, u32)> = Vec::with_capacity(size);
                 cursor.set_position((fd.ref_start + refpos) as u64);
-                for _ in 0..size {
-                    new_table.push((
-                        cursor.read_u32::<LittleEndian>().unwrap(),
-                        cursor.read_u32::<LittleEndian>().unwrap(),
-                    ));
-                }
-                new_table.sort_by(|a, b| a.0.cmp(&b.0));
+                let mut new_table = (0..size)
+                                    .map(|_|(
+                                        cursor.read_u32::<LittleEndian>().unwrap(),
+                                        cursor.read_u32::<LittleEndian>().unwrap()
+                                    ))
+                                    .collect::<Vec<_>>();
+                new_table.sort_by_key(|a| a.0);
                 fd.ref_tables.insert(refpos, RefTable(new_table));
             }
-            let t = fd.ref_tables.get(&refpos).unwrap().to_owned();
 
-            let mut params: Vec<(Hash40, param::ParamKind)> = Vec::with_capacity(size);
-            for pair in t.0 {
-                let hash = fd.hash_table[pair.0 as usize];
-                cursor.set_position(pos + pair.1 as u64);
-                params.push((hash, read_param(cursor, fd).unwrap()))
-            }
+            let &RefTable(ref table) = fd.ref_tables.get(&refpos).unwrap();
+
+            let params = table.iter()
+                .map(|&(hash_index, offset)| (hash_index as usize, offset as u64))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|(hash_index, offset)|{
+                    let hash = fd.hash_table[hash_index];
+                    cursor.set_position(pos + offset);
+                    (hash, read_param(cursor, fd).unwrap())
+                })
+                .collect::<Vec<(Hash40, param::ParamKind)>>();
+
             Ok(param::ParamKind::Struct(params))
         }
         _ => Err(Error::new(
