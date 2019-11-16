@@ -1,8 +1,9 @@
 use crate::param;
+use crate::RefTable;
 use byteorder::{LittleEndian, ReadBytesExt};
 use hash40::{Hash40, ReadHash40};
 use std::collections::HashMap;
-use std::io::{Cursor, Error, ErrorKind, Read};
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
 
 #[derive(Debug)]
 struct FileData {
@@ -13,13 +14,12 @@ struct FileData {
     ref_tables: HashMap<u32, RefTable>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-// (hash index, param offset)
-struct RefTable(Vec<(u32, u32)>);
-
-pub fn disassemble(cursor: &mut Cursor<Vec<u8>>) -> Result<param::ParamKind, Error> {
+pub fn disassemble<C>(cursor: &mut C) -> Result<param::ParamStruct, Error>
+where
+    C: Read + Seek,
+{
     let mut magic_bytes = [0; 8];
-    cursor.read(&mut magic_bytes)?;
+    cursor.read_exact(&mut magic_bytes)?;
     if &magic_bytes != param::MAGIC {
         return Err(Error::new(ErrorKind::InvalidData, "Invalid file magic"));
     }
@@ -27,10 +27,12 @@ pub fn disassemble(cursor: &mut Cursor<Vec<u8>>) -> Result<param::ParamKind, Err
     let hashsize = cursor.read_u32::<LittleEndian>()?;
     let hashnum = (hashsize / 8) as usize;
     let refsize = cursor.read_u32::<LittleEndian>()?;
+    // using relative addresses allows in-memory read of param files
+    let hash_start = cursor.seek(SeekFrom::Current(0))? as u32;
 
     let mut fd = FileData {
-        ref_start: 0x10 + hashsize,
-        param_start: 0x10 + hashsize + refsize,
+        ref_start: hash_start + hashsize,
+        param_start: hash_start + hashsize + refsize,
         hash_table: Vec::with_capacity(hashnum),
         ref_tables: HashMap::new(),
     };
@@ -39,7 +41,7 @@ pub fn disassemble(cursor: &mut Cursor<Vec<u8>>) -> Result<param::ParamKind, Err
         fd.hash_table.push(cursor.read_hash40::<LittleEndian>()?)
     }
 
-    cursor.set_position(fd.param_start as u64);
+    cursor.seek(SeekFrom::Start(fd.param_start as u64))?;
     let first_byte = cursor.read_u8()?;
     if first_byte != 12 {
         return Err(Error::new(
@@ -47,12 +49,21 @@ pub fn disassemble(cursor: &mut Cursor<Vec<u8>>) -> Result<param::ParamKind, Err
             "param file does not contain a root",
         ));
     }
-    cursor.set_position(cursor.position() - 1);
+    cursor.seek(SeekFrom::Current(-1))?;
 
-    read_param(cursor, &mut fd)
+    // TODO: possible cleanup here
+    if let param::ParamKind::Struct(s) = read_param(cursor, &mut fd)? {
+        Ok(s)
+    } else {
+        //the earlier block guarantees we get a struct
+        unreachable!()
+    }
 }
 
-fn read_param(cursor: &mut Cursor<Vec<u8>>, fd: &mut FileData) -> Result<param::ParamKind, Error> {
+fn read_param<C>(cursor: &mut C, fd: &mut FileData) -> Result<param::ParamKind, Error>
+where
+    C: Read + Seek,
+{
     match cursor.read_u8()? {
         1 => {
             let val = cursor.read_u8()?;
@@ -94,7 +105,7 @@ fn read_param(cursor: &mut Cursor<Vec<u8>>, fd: &mut FileData) -> Result<param::
             let strpos = cursor.read_u32::<LittleEndian>()?;
             //remembering where we were is actually unnecessary
             //let curpos = cursor.position();
-            cursor.set_position((fd.ref_start + strpos) as u64);
+            cursor.seek(SeekFrom::Start((fd.ref_start + strpos) as u64))?;
             let mut val = String::new();
             let mut next: u8;
             loop {
@@ -109,50 +120,53 @@ fn read_param(cursor: &mut Cursor<Vec<u8>>, fd: &mut FileData) -> Result<param::
             Ok(param::ParamKind::Str(val))
         }
         11 => {
-            let pos = cursor.position() - 1;
+            let pos = cursor.seek(SeekFrom::Current(0))? - 1;
             let size = cursor.read_u32::<LittleEndian>()?;
 
             let params = (0..size)
-                    .map(|_| cursor.read_u32::<LittleEndian>())
-                    .collect::<Result<Vec<_>, _>>()?
-                    .into_iter()
-                    .map(|offset|{
-                        cursor.set_position(pos + offset as u64);
-                        read_param(cursor, fd)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
+                .map(|_| cursor.read_u32::<LittleEndian>())
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .map(|offset| {
+                    cursor.seek(SeekFrom::Start(pos + offset as u64))?;
+                    read_param(cursor, fd)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
 
             Ok(param::ParamKind::List(params))
         }
         12 => {
-            let pos = cursor.position() - 1;
+            let pos = cursor.seek(SeekFrom::Current(0))? - 1;
             let size = cursor.read_u32::<LittleEndian>().unwrap() as usize;
             let refpos = cursor.read_u32::<LittleEndian>().unwrap();
 
             if !fd.ref_tables.contains_key(&refpos) {
-                cursor.set_position((fd.ref_start + refpos) as u64);
+                cursor.seek(SeekFrom::Start((fd.ref_start + refpos) as u64))?;
                 let mut new_table = (0..size)
-                                    .map(|_|(
-                                        cursor.read_u32::<LittleEndian>().unwrap(),
-                                        cursor.read_u32::<LittleEndian>().unwrap()
-                                    ))
-                                    .collect::<Vec<_>>();
+                    .map(|_| {
+                        Ok((
+                            cursor.read_u32::<LittleEndian>()?,
+                            cursor.read_u32::<LittleEndian>()?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
                 new_table.sort_by_key(|a| a.0);
-                fd.ref_tables.insert(refpos, RefTable(new_table));
+                fd.ref_tables.insert(refpos, new_table);
             }
 
-            let &RefTable(ref table) = fd.ref_tables.get(&refpos).unwrap();
+            let table = fd.ref_tables.get(&refpos).unwrap();
 
-            let params = table.iter()
+            let params = table
+                .iter()
                 .map(|&(hash_index, offset)| (hash_index as usize, offset as u64))
                 .collect::<Vec<_>>()
                 .into_iter()
-                .map(|(hash_index, offset)|{
+                .map(|(hash_index, offset)| {
                     let hash = fd.hash_table[hash_index];
-                    cursor.set_position(pos + offset);
-                    (hash, read_param(cursor, fd).unwrap())
+                    cursor.seek(SeekFrom::Start(pos + offset))?;
+                    Ok((hash, read_param(cursor, fd)?))
                 })
-                .collect::<Vec<(Hash40, param::ParamKind)>>();
+                .collect::<Result<Vec<_>, Error>>()?;
 
             Ok(param::ParamKind::Struct(params))
         }
@@ -160,7 +174,7 @@ fn read_param(cursor: &mut Cursor<Vec<u8>>, fd: &mut FileData) -> Result<param::
             ErrorKind::InvalidData,
             format!(
                 "encountered invalid param number at position: {}",
-                cursor.position() - 1
+                cursor.seek(SeekFrom::Current(0))? - 1
             ),
         )),
     }

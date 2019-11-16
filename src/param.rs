@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 pub const MAGIC: &[u8; 8] = b"paracobn"; //paracobn
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum ParamKind {
     //index starts at 1
     Bool(bool),
@@ -16,6 +16,10 @@ pub enum ParamKind {
     Float(f32),
     Hash(Hash40),
     Str(String),
-    List(Vec<ParamKind>),
-    Struct(Vec<(Hash40, ParamKind)>),
+    List(ParamList),
+    Struct(ParamStruct),
 }
+
+pub type ParamList = Vec<ParamKind>;
+
+pub type ParamStruct = Vec<(Hash40, ParamKind)>;
