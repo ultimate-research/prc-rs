@@ -57,7 +57,7 @@ where
     cursor.write_u32::<LittleEndian>(hash_size)?;
     cursor.seek(SeekFrom::Current(4))?;
     for hash in &fd.hashes {
-        cursor.write_hash40::<LittleEndian>(hash)?;
+        cursor.write_hash40::<LittleEndian>(*hash)?;
     }
 
     handle_ref_entries(&mut fd);
