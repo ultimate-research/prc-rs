@@ -6,6 +6,8 @@ use std::fs::{read, write};
 use std::io::{Cursor, Error, Read, Seek, Write};
 use std::path::Path;
 
+pub use hash40;
+
 pub(crate) type RefTable = Vec<(u32, u32)>;
 
 pub fn read_stream<R>(reader: &mut R) -> Result<param::ParamStruct, Error>
