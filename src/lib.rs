@@ -7,6 +7,7 @@ use std::io::{Cursor, Error, Read, Seek, Write};
 use std::path::Path;
 
 pub use hash40;
+pub use strum;
 
 pub(crate) type RefTable = Vec<(u32, u32)>;
 

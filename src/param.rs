@@ -1,10 +1,11 @@
 use hash40::Hash40;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use strum_macros::EnumVariantNames;
 
 pub const MAGIC: &[u8; 8] = b"paracobn"; //paracobn
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, EnumVariantNames)]
 pub enum ParamKind {
     //index starts at 1
     Bool(bool),
@@ -33,13 +34,18 @@ impl ParamKind {
     pub fn unwrap<T: FromParam>(&self) -> &T {
         <T>::from_param(self).unwrap()
     }
-    
+
     pub fn get<T: FromParam>(&self) -> Option<&T> {
         <T>::from_param(self)
     }
 
     pub fn unwrap_as_hashmap(&self) -> Option<HashMap<Hash40, ParamKind>> {
-        Some(self.get::<Vec<(Hash40, ParamKind)>>()?.clone().into_iter().collect())
+        Some(
+            self.get::<Vec<(Hash40, ParamKind)>>()?
+                .clone()
+                .into_iter()
+                .collect(),
+        )
     }
 }
 
@@ -61,7 +67,7 @@ macro_rules! impl_from_param {
     }
 }
 
-impl_from_param!{
+impl_from_param! {
     Bool(bool),
     I8(i8),
     U8(u8),
