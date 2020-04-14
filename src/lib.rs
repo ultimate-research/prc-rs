@@ -25,12 +25,12 @@ where
     asm::assemble(writer, param_struct)
 }
 
-pub fn open<P: AsRef<Path>>(filepath: &P) -> Result<param::ParamStruct, Error> {
+pub fn open<P: AsRef<Path>>(filepath: P) -> Result<param::ParamStruct, Error> {
     let buf = read(filepath)?;
     disasm::disassemble(&mut Cursor::new(buf))
 }
 
-pub fn save<P: AsRef<Path>>(filepath: &P, param: &param::ParamStruct) -> Result<(), Error> {
+pub fn save<P: AsRef<Path>>(filepath: P, param: &param::ParamStruct) -> Result<(), Error> {
     let mut writer = Cursor::new(Vec::<u8>::new());
     asm::assemble(&mut writer, param)?;
     write(filepath, &writer.into_inner())
