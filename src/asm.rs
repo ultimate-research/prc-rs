@@ -203,7 +203,7 @@ where
     param_cursor.write_u32::<LittleEndian>(0)?; // placeholder number
 
     // do I keep the separate pass for hashes or combine two loops into this func?
-    let mut sorted = param_struct.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
+    let mut sorted = param_struct.iter().collect::<Vec<&_>>();
     sorted.sort_by_key(|p| p.0);
 
     // we don't know what our data will look like yet

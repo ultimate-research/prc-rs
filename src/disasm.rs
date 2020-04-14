@@ -4,6 +4,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use hash40::{Hash40, ReadHash40};
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
+use std::rc::Rc;
 
 #[derive(Debug)]
 struct FileData {
@@ -11,7 +12,7 @@ struct FileData {
     param_start: u32,
     hash_table: Vec<Hash40>,
     //maps an offset to an index in a list of ref-tables
-    ref_tables: HashMap<u32, RefTable>,
+    ref_tables: HashMap<u32, Rc<RefTable>>,
 }
 
 pub fn disassemble<C>(cursor: &mut C) -> Result<param::ParamStruct, Error>
@@ -140,6 +141,8 @@ where
             let size = cursor.read_u32::<LittleEndian>().unwrap() as usize;
             let refpos = cursor.read_u32::<LittleEndian>().unwrap();
 
+            // '!contains_key' followed by 'insert' is demonstrably faster than using 'entry'
+            // despite what the rust clippy feature states
             if !fd.ref_tables.contains_key(&refpos) {
                 cursor.seek(SeekFrom::Start((fd.ref_start + refpos) as u64))?;
                 let mut new_table = (0..size)
@@ -151,22 +154,32 @@ where
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
                 new_table.sort_by_key(|a| a.0);
-                fd.ref_tables.insert(refpos, new_table);
+                fd.ref_tables.insert(refpos, Rc::new(new_table));
             }
 
-            let table = fd.ref_tables.get(&refpos).unwrap();
+            let table = Rc::clone(fd.ref_tables.get(&refpos).unwrap());
 
             let params = table
                 .iter()
-                .map(|&(hash_index, offset)| (hash_index as usize, offset as u64))
-                .collect::<Vec<_>>()
-                .into_iter()
-                .map(|(hash_index, offset)| {
-                    let hash = fd.hash_table[hash_index];
-                    cursor.seek(SeekFrom::Start(pos + offset))?;
-                    Ok((hash, read_param(cursor, fd)?))
+                .map(|&(hash_index, offset)| {
+                    cursor.seek(SeekFrom::Start(pos + offset as u64))?;
+                    Ok((fd.hash_table[hash_index as usize], read_param(cursor, fd)?))
                 })
                 .collect::<Result<Vec<_>, Error>>()?;
+
+            // let params = table
+            //     .iter()
+            //     .map(|&(hash_index, offset)| (hash_index as usize, offset as u64))
+            //     .collect::<Vec<_>>()
+            //     .into_iter()
+            //     .map(|(hash_index, offset)| {
+            //         let hash = fd.hash_table[hash_index];
+            //         cursor.seek(SeekFrom::Start(pos + offset))?;
+            //         Ok((hash, read_param(cursor, fd)?))
+            //     })
+            //     .collect::<Result<Vec<_>, Error>>()?;
+
+            
 
             Ok(param::ParamKind::Struct(params))
         }
