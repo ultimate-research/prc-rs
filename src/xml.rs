@@ -47,8 +47,7 @@ fn struct_to_node<W: Write>(param: &ParamStruct, writer: &mut Writer<W>, attr: O
     } else {
         writer.write_event(Event::Start(start))?;
         for (hash, child) in param.iter() {
-            let label = &hash.to_label();
-            param_to_node(child, writer, Some(("hash", label)))?;
+            param_to_node(child, writer, Some(("hash", &format!("{}", hash))))?;
         }
         writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
     }
@@ -78,7 +77,7 @@ fn param_to_node<W: Write>(param: &ParamKind, writer: &mut Writer<W>, attr: Opti
         ParamKind::I32(val) => write_constant!(b"int", val),
         ParamKind::U32(val) => write_constant!(b"uint", val),
         ParamKind::Float(val) => write_constant!(b"float", val),
-        ParamKind::Hash(val) => write_constant!(b"hash40", val.to_label()),
+        ParamKind::Hash(val) => write_constant!(b"hash40", val),
         ParamKind::Str(val) => write_constant!(b"string", val),
         ParamKind::List(val) => list_to_node(val, writer, attr)?,
         ParamKind::Struct(val) => struct_to_node(val, writer, attr)?,

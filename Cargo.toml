@@ -11,6 +11,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "param-xml"
 path = "src/main.rs"
+required-features = ["param-xml"]
 
 [features]
 default = [ "param-xml" ]

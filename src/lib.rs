@@ -1,6 +1,8 @@
 mod asm;
 mod disasm;
 pub mod param;
+#[cfg(feature = "param-xml")]
+pub mod xml;
 
 use std::fs::{read, write};
 use std::io::{Cursor, Error, Read, Seek, Write};
