@@ -6,11 +6,11 @@ edition = "2018"
 
 [lib]
 name = "prc"
-path = "src/lib.rs"
+path = "src/lib/lib.rs"
 
 [[bin]]
 name = "param-xml"
-path = "src/main.rs"
+path = "src/param-xml/main.rs"
 required-features = ["param-xml"]
 
 [features]
