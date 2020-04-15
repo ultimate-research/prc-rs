@@ -179,8 +179,6 @@ where
             //     })
             //     .collect::<Result<Vec<_>, Error>>()?;
 
-            
-
             Ok(param::ParamKind::Struct(params))
         }
         _ => Err(Error::new(

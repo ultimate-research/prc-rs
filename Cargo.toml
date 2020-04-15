@@ -9,13 +9,18 @@ name = "prc"
 path = "src/lib.rs"
 
 [[bin]]
-name = "prc-tst"
+name = "param-xml"
 path = "src/main.rs"
+
+[features]
+default = [ "param-xml" ]
+param-xml = [ "quick-xml" ]
 
 [dependencies]
 byteorder = "^1.3"
 hash40 = "^0.4.0"
+indexmap = "^1.2"
 serde = { version = "^1", features = ["derive"] }
 strum = "^0.18"
 strum_macros = "^0.18"
-indexmap = "^1.2"
+quick-xml = { version = "^0.18.1", optional = true }
