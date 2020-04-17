@@ -189,6 +189,28 @@ fn struct_to_node<W: Write>(
 
 // METHODS FOR READING
 
+fn check_close_tag<T>(open_tag: &[u8], close_maybe: Event, ret: T) -> Result<T, ReadErrorVariant> {
+    if let Event::End(close_tag) = close_maybe {
+        check_close_tag_name(open_tag, close_tag, ret)
+    } else {
+        Err(ReadErrorVariant::UnexpectedEvent(
+            QuickXmlEventType::End,
+            QuickXmlEventType::from(close_maybe),
+        ))
+    }
+}
+
+fn check_close_tag_name<T>(open_tag: &[u8], close_tag: BytesEnd, ret: T) -> Result<T, ReadErrorVariant> {
+    let name = close_tag.name();
+    if open_tag == name {
+        Ok(ret)
+    } else {
+        Err(ReadErrorVariant::UnmatchedCloseTag(
+            from_utf8(name)?.to_string()
+        ))
+    }
+}
+
 fn node_to_param<R: BufRead>(
     reader: &mut Reader<R>,
     buf: &mut Vec<u8>,
@@ -198,19 +220,12 @@ fn node_to_param<R: BufRead>(
         ($param_kind:path) => {{
             let val = reader.read_event(buf)?;
             if let Event::Text(bytes) = val {
-                let close = from_utf8(&*bytes)?.to_string();
                 let p = FromStr::from_str(from_utf8(&bytes)?)
                     .map($param_kind)
                     .or(Err(ReadErrorVariant::ParseError))?;
 
-                let close_tag = reader.read_event(buf)?;
-                if open_tag == &*close_tag {
-                    Ok(p)
-                } else {
-                    Err(ReadErrorVariant::UnmatchedCloseTag(
-                        close,
-                    ))
-                }
+                let close_maybe = reader.read_event(buf)?;
+                check_close_tag(open_tag, close_maybe, p)
             } else {
                 Err(ReadErrorVariant::UnexpectedEvent(
                     QuickXmlEventType::Text,
@@ -253,15 +268,7 @@ fn node_to_list<'a, R: BufRead>(
                     node_to_param(reader, buf, &open_tag)?
                 )
             },
-            Event::End(bytes) => {
-                return if &*bytes == b"list" {
-                    Ok(param_list)
-                } else {
-                    Err(ReadErrorVariant::UnmatchedCloseTag(
-                        from_utf8(&*bytes)?.to_string(),
-                    ))
-                }
-            }
+            Event::End(bytes) => return check_close_tag_name(b"list", bytes, param_list),
             _ => {
                 return Err(ReadErrorVariant::UnexpectedEvent(
                     QuickXmlEventType::Start,
@@ -296,15 +303,7 @@ fn node_to_struct<R: BufRead>(
                     node_to_param(reader, buf, &open_tag)?,
                 ));
             }
-            Event::End(bytes) => {
-                return if &*bytes == b"struct" {
-                    Ok(param_struct)
-                } else {
-                    Err(ReadErrorVariant::UnmatchedCloseTag(
-                        from_utf8(&*bytes)?.to_string(),
-                    ))
-                }
-            }
+            Event::End(bytes) => return check_close_tag_name(b"struct", bytes, param_struct),
             _ => {
                 return Err(ReadErrorVariant::UnexpectedEvent(
                     QuickXmlEventType::Start,
