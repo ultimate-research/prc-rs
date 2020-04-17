@@ -1,5 +1,5 @@
 use prc::open;
-use prc::xml::to_xml;
+use prc::xml::write_xml;
 
 use std::fs::File;
 use std::io::BufWriter;
@@ -13,6 +13,6 @@ fn main() {
 
     now = Instant::now();
     let mut writer = BufWriter::new(File::create("output.xml").unwrap());
-    to_xml(&param, &mut writer).unwrap();
+    write_xml(&param, &mut writer).unwrap();
     println!("Converted to XML in {}", now.elapsed().as_secs_f32());
 }
