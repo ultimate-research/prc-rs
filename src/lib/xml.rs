@@ -198,6 +198,7 @@ fn node_to_param<R: BufRead>(
         ($param_kind:path) => {{
             let val = reader.read_event(buf)?;
             if let Event::Text(bytes) = val {
+                let close = from_utf8(&*bytes)?.to_string();
                 let p = FromStr::from_str(from_utf8(&bytes)?)
                     .map($param_kind)
                     .or(Err(ReadErrorVariant::ParseError))?;
@@ -207,7 +208,7 @@ fn node_to_param<R: BufRead>(
                     Ok(p)
                 } else {
                     Err(ReadErrorVariant::UnmatchedCloseTag(
-                        from_utf8(&*bytes)?.to_string(),
+                        close,
                     ))
                 }
             } else {
@@ -246,7 +247,12 @@ fn node_to_list<'a, R: BufRead>(
     loop {
         let event = reader.read_event(buf)?;
         match event {
-            Event::Start(bytes) => param_list.push(node_to_param(reader, buf, bytes.name())?),
+            Event::Start(bytes) => {
+                let open_tag = Vec::from(bytes.name());
+                param_list.push(
+                    node_to_param(reader, buf, &open_tag)?
+                )
+            },
             Event::End(bytes) => {
                 return if &*bytes == b"list" {
                     Ok(param_list)
@@ -275,6 +281,7 @@ fn node_to_struct<R: BufRead>(
         let event = reader.read_event(buf)?;
         match event {
             Event::Start(bytes) => {
+                let open_tag = Vec::from(bytes.name());
                 param_struct.push((
                     bytes
                         .attributes()
@@ -286,7 +293,7 @@ fn node_to_struct<R: BufRead>(
                             FromStr::from_str(from_utf8(&attr.value)?)
                                 .or(Err(ReadErrorVariant::MissingHash))
                         })?,
-                    node_to_param(reader, buf, bytes.name())?,
+                    node_to_param(reader, buf, &open_tag)?,
                 ));
             }
             Event::End(bytes) => {
