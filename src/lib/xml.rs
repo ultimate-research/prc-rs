@@ -85,6 +85,7 @@ struct MainReader<B: BufRead> {
     buf: Vec<u8>,
 }
 
+/// Write a ParamStruct as XML
 pub fn write_xml<W: Write>(param: &ParamStruct, writer: &mut W) -> Result<(), quick_xml::Error> {
     let mut xml_writer = Writer::new_with_indent(writer, b' ', 2);
     xml_writer.write_event(Event::Decl(BytesDecl::new(b"1.0", Some(b"utf-8"), None)))?;
@@ -92,10 +93,52 @@ pub fn write_xml<W: Write>(param: &ParamStruct, writer: &mut W) -> Result<(), qu
     Ok(())
 }
 
+/// Read a ParamStruct from XML
 pub fn read_xml<R: BufRead>(reader: &mut R) -> Result<ParamKind, ReadError> {
     let mut xml_reader = Reader::from_reader(reader).expand_empty_elements(true);
     let mut buf = Vec::<u8>::new();
     loop {}
+}
+
+// METHODS FOR WRITING
+
+fn param_to_node<W: Write>(
+    param: &ParamKind,
+    writer: &mut Writer<W>,
+    attr: Option<(&str, &str)>,
+) -> Result<(), quick_xml::Error> {
+    macro_rules! write_constant {
+        ($tag_name:literal, $value:expr) => {{
+            let name = $tag_name;
+            let mut start = BytesStart::borrowed_name(name);
+            if let Some(a) = attr {
+                start.push_attribute(a);
+            }
+            writer.write_event(Event::Start(start))?;
+            // Is there any shorter way of expressing this?
+            writer.write_event(Event::Text(BytesText::from_plain_str(&format!(
+                "{}",
+                $value
+            ))))?;
+            writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
+        }};
+    };
+    match param {
+        ParamKind::Bool(val) => write_constant!(b"bool", val),
+        ParamKind::I8(val) => write_constant!(b"sbyte", val),
+        ParamKind::U8(val) => write_constant!(b"byte", val),
+        ParamKind::I16(val) => write_constant!(b"short", val),
+        ParamKind::U16(val) => write_constant!(b"ushort", val),
+        ParamKind::I32(val) => write_constant!(b"int", val),
+        ParamKind::U32(val) => write_constant!(b"uint", val),
+        ParamKind::Float(val) => write_constant!(b"float", val),
+        ParamKind::Hash(val) => write_constant!(b"hash40", val),
+        ParamKind::Str(val) => write_constant!(b"string", val),
+        ParamKind::List(val) => list_to_node(val, writer, attr)?,
+        ParamKind::Struct(val) => struct_to_node(val, writer, attr)?,
+    };
+
+    Ok(())
 }
 
 fn list_to_node<W: Write>(
@@ -144,44 +187,7 @@ fn struct_to_node<W: Write>(
     Ok(())
 }
 
-fn param_to_node<W: Write>(
-    param: &ParamKind,
-    writer: &mut Writer<W>,
-    attr: Option<(&str, &str)>,
-) -> Result<(), quick_xml::Error> {
-    macro_rules! write_constant {
-        ($tag_name:literal, $value:expr) => {{
-            let name = $tag_name;
-            let mut start = BytesStart::borrowed_name(name);
-            if let Some(a) = attr {
-                start.push_attribute(a);
-            }
-            writer.write_event(Event::Start(start))?;
-            // Is there any shorter way of expressing this?
-            writer.write_event(Event::Text(BytesText::from_plain_str(&format!(
-                "{}",
-                $value
-            ))))?;
-            writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
-        }};
-    };
-    match param {
-        ParamKind::Bool(val) => write_constant!(b"bool", val),
-        ParamKind::I8(val) => write_constant!(b"sbyte", val),
-        ParamKind::U8(val) => write_constant!(b"byte", val),
-        ParamKind::I16(val) => write_constant!(b"short", val),
-        ParamKind::U16(val) => write_constant!(b"ushort", val),
-        ParamKind::I32(val) => write_constant!(b"int", val),
-        ParamKind::U32(val) => write_constant!(b"uint", val),
-        ParamKind::Float(val) => write_constant!(b"float", val),
-        ParamKind::Hash(val) => write_constant!(b"hash40", val),
-        ParamKind::Str(val) => write_constant!(b"string", val),
-        ParamKind::List(val) => list_to_node(val, writer, attr)?,
-        ParamKind::Struct(val) => struct_to_node(val, writer, attr)?,
-    };
-
-    Ok(())
-}
+// METHODS FOR READING
 
 fn node_to_param<R: BufRead>(
     reader: &mut Reader<R>,
