@@ -32,7 +32,7 @@ pub enum ReadErrorVariant {
     ParseError,
     UnknownOpenTag(String),
     UnmatchedCloseTag(String),
-    MissingHash
+    MissingHash,
 }
 
 // Bad practice to just copy event names?
@@ -195,28 +195,28 @@ fn node_to_param<R: BufRead>(
     open_tag: &[u8],
 ) -> Result<ParamKind, ReadErrorVariant> {
     macro_rules! read_constant {
-        ($param_kind:path) => {
-            {
-                let val = reader.read_event(buf)?;
-                if let Event::Text(bytes) = val {
-                    let p = FromStr::from_str(from_utf8(&bytes)?)
-                        .map($param_kind)
-                        .or(Err(ReadErrorVariant::ParseError))?;
+        ($param_kind:path) => {{
+            let val = reader.read_event(buf)?;
+            if let Event::Text(bytes) = val {
+                let p = FromStr::from_str(from_utf8(&bytes)?)
+                    .map($param_kind)
+                    .or(Err(ReadErrorVariant::ParseError))?;
 
-                    let close_tag = reader.read_event(buf)?;
-                    if open_tag == &*close_tag {
-                        Ok(p)
-                    } else {
-                        Err(ReadErrorVariant::UnmatchedCloseTag(from_utf8(&*bytes)?.to_string())) 
-                    }
+                let close_tag = reader.read_event(buf)?;
+                if open_tag == &*close_tag {
+                    Ok(p)
                 } else {
-                    Err(ReadErrorVariant::UnexpectedEvent(
-                        QuickXmlEventType::Text,
-                        QuickXmlEventType::from(val),
+                    Err(ReadErrorVariant::UnmatchedCloseTag(
+                        from_utf8(&*bytes)?.to_string(),
                     ))
                 }
+            } else {
+                Err(ReadErrorVariant::UnexpectedEvent(
+                    QuickXmlEventType::Text,
+                    QuickXmlEventType::from(val),
+                ))
             }
-        };
+        }};
     }
 
     match open_tag {
@@ -232,23 +232,30 @@ fn node_to_param<R: BufRead>(
         b"string" => read_constant!(ParamKind::Str),
         b"list" => Ok(ParamKind::List(node_to_list(reader, buf)?)),
         b"struct" => Ok(ParamKind::Struct(node_to_struct(reader, buf)?)),
-        _ => Err(ReadErrorVariant::UnknownOpenTag(from_utf8(open_tag)?.to_string())),
+        _ => Err(ReadErrorVariant::UnknownOpenTag(
+            from_utf8(open_tag)?.to_string(),
+        )),
     }
 }
 
-fn node_to_list<'a, R: BufRead>(reader: &mut Reader<R>, buf: &'a mut Vec<u8>) -> Result<ParamList, ReadErrorVariant> {
+fn node_to_list<'a, R: BufRead>(
+    reader: &mut Reader<R>,
+    buf: &'a mut Vec<u8>,
+) -> Result<ParamList, ReadErrorVariant> {
     let mut param_list = ParamList::new();
     loop {
         let event = reader.read_event(buf)?;
         match event {
-            Event::Start(bytes) => { param_list.push(node_to_param(reader, buf, bytes.name())?) }
+            Event::Start(bytes) => param_list.push(node_to_param(reader, buf, bytes.name())?),
             Event::End(bytes) => {
                 return if &*bytes == b"list" {
                     Ok(param_list)
                 } else {
-                    Err(ReadErrorVariant::UnmatchedCloseTag(from_utf8(&*bytes)?.to_string())) 
+                    Err(ReadErrorVariant::UnmatchedCloseTag(
+                        from_utf8(&*bytes)?.to_string(),
+                    ))
                 }
-            },
+            }
             _ => {
                 return Err(ReadErrorVariant::UnexpectedEvent(
                     QuickXmlEventType::Start,
@@ -259,32 +266,38 @@ fn node_to_list<'a, R: BufRead>(reader: &mut Reader<R>, buf: &'a mut Vec<u8>) ->
     }
 }
 
-fn node_to_struct<R: BufRead>(reader: &mut Reader<R>, buf: &mut Vec<u8>) -> Result<ParamStruct, ReadErrorVariant> {
+fn node_to_struct<R: BufRead>(
+    reader: &mut Reader<R>,
+    buf: &mut Vec<u8>,
+) -> Result<ParamStruct, ReadErrorVariant> {
     let mut param_struct = ParamStruct::new();
     loop {
         let event = reader.read_event(buf)?;
         match event {
             Event::Start(bytes) => {
                 param_struct.push((
-                    bytes.attributes()
-                        .collect::<Result<Vec<_>,_>>()?
+                    bytes
+                        .attributes()
+                        .collect::<Result<Vec<_>, _>>()?
                         .iter()
                         .find(|attr| attr.key == b"hash")
                         .ok_or(ReadErrorVariant::MissingHash)
-                        .and_then(|attr|
+                        .and_then(|attr| {
                             FromStr::from_str(from_utf8(&attr.value)?)
                                 .or(Err(ReadErrorVariant::MissingHash))
-                        )?,
-                    node_to_param(reader, buf, bytes.name())?
+                        })?,
+                    node_to_param(reader, buf, bytes.name())?,
                 ));
             }
             Event::End(bytes) => {
                 return if &*bytes == b"struct" {
                     Ok(param_struct)
                 } else {
-                    Err(ReadErrorVariant::UnmatchedCloseTag(from_utf8(&*bytes)?.to_string())) 
+                    Err(ReadErrorVariant::UnmatchedCloseTag(
+                        from_utf8(&*bytes)?.to_string(),
+                    ))
                 }
-            },
+            }
             _ => {
                 return Err(ReadErrorVariant::UnexpectedEvent(
                     QuickXmlEventType::Start,
