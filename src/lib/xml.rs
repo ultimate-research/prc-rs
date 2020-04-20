@@ -7,12 +7,9 @@ use std::str::{from_utf8, FromStr, Utf8Error};
 
 #[derive(Debug)]
 /// Types of errors encountered the XML param file
-pub enum ReadError<'a> {
+pub enum ReadError {
     /// `quick-xml` error, such as mismatched tags, non-utf8 text, broken syntax, etc
     QuickXml(quick_xml::Error),
-    /// Wrong event received
-    /// Expected
-    UnexpectedEvent(Expect<'a>),
     /// Value parsing error
     ParseError,
     /// Opening tag has an unknown name
@@ -21,10 +18,11 @@ pub enum ReadError<'a> {
     UnmatchedCloseTag(String),
     /// For child nodes of structs, the 'hash' attribute is not found
     MissingHash,
-    /// XML declaration wasn't valid (why)
-    InvalidDecl(String),
     /// For the first tag after XML declaration, tag must be 'struct'
     ExpectedStructTag,
+    ExpectedOpenOrCloseTag(String),
+    ExpectedCloseTag(String),
+    ExpectedText,
 }
 
 // Bad practice to just copy event names?
@@ -43,21 +41,42 @@ pub enum QuickXmlEventType {
     Text,
 }
 
-impl<'a> From<quick_xml::Error> for ReadError<'a> {
+impl From<quick_xml::Error> for ReadError {
     fn from(f: quick_xml::Error) -> Self {
         Self::QuickXml(f)
     }
 }
 
-impl<'a> From<Utf8Error> for ReadError<'a> {
+impl From<Utf8Error> for ReadError {
     fn from(f: Utf8Error) -> Self {
         Self::QuickXml(quick_xml::Error::from(f))
     }
 }
 
-impl<'a> From<ioError> for ReadError<'a> {
+impl From<ioError> for ReadError {
     fn from(f: ioError) -> Self {
         Self::QuickXml(quick_xml::Error::from(f))
+    }
+}
+
+impl<'a> From<&'a Expect<'a>> for ReadError {
+    fn from(f: &Expect) -> Self {
+        match f {
+            Expect::Struct => Self::ExpectedStructTag,
+            Expect::OpenOrCloseTag(value) => {
+                match from_utf8(value) {
+                    Ok(s) => Self::ExpectedOpenOrCloseTag(String::from(s)),
+                    Err(e) => Self::from(e)
+                }
+            },
+            Expect::CloseTag(value) => {
+                match from_utf8(value) {
+                    Ok(s) => Self::ExpectedCloseTag(String::from(s)),
+                    Err(e) => Self::from(e)
+                }
+            }
+            Expect::Text => Self::ExpectedText,
+        }
     }
 }
 
@@ -90,7 +109,7 @@ impl<'a> ParamStack<'a> {
         }
     }
 
-    fn push(&mut self, node_name: &[u8]) -> Result<(), ReadError> {
+    fn push(&mut self, node_name: &'a [u8]) -> Result<(), ReadError> {
         match self.expect {
             Expect::Struct => {
                 if node_name == b"struct" {
@@ -100,52 +119,53 @@ impl<'a> ParamStack<'a> {
                     Err(ReadError::ExpectedStructTag)
                 }
             }
-            Expect::OpenTag => {
-                match node_name {
-                    b"bool" => {}
-                    b"i8" => {}
-                    b"u8" => {}
-                    b"i16" => {}
-                    b"u16" => {}
-                    b"i32" => {}
-                    b"u32" => {}
-                    b"float" => {}
-                    b"hash40" => {}
-                    b"string" => {}
-                    b"list" => {}
-                    b"struct" => {}
-                }
-            }
-            Expect::CloseTag(close) => {
+            Expect::OpenOrCloseTag(_) => {
+                self.stack.push(
+                    match node_name {
+                        b"bool" => ParamKind::Bool(Default::default()),
+                        b"sbyte" => ParamKind::I8(Default::default()),
+                        b"byte" => ParamKind::U8(Default::default()),
+                        b"short" => ParamKind::I16(Default::default()),
+                        b"ushort" => ParamKind::U16(Default::default()),
+                        b"int" => ParamKind::I32(Default::default()),
+                        b"uint" => ParamKind::U32(Default::default()),
+                        b"float" => ParamKind::Float(Default::default()),
+                        b"hash40" => ParamKind::Hash(Default::default()),
+                        b"string" => ParamKind::Str(Default::default()),
+                        b"list" => ParamKind::List(Default::default()),
+                        b"struct" => ParamKind::Struct(Default::default()),
+                        _ => return Err(ReadError::UnknownOpenTag(
+                            String::from(from_utf8(node_name)?))
+                        ),
+                });
 
+                Ok(())
             }
-            _ => panic!(),
+            _ => unreachable!(),
         }
     }
 
-    fn pop(&mut self) -> ParamKind {
-        let pop = self.stack.pop().unwrap();
-        pop
+    fn pop(&mut self, node_name: &[u8]) -> Result<(), ReadError> {
+        unimplemented!()
     }
 
     fn peek(&self) -> &ParamKind {
         &self.stack[self.stack.len() - 1]
     }
 
-    fn peek_mut(&mut self) -> &mut ParamKind {
-        &mut self.stack[self.stack.len() - 1]
+    fn last_mut(&mut self) -> &mut ParamKind {
+        self.stack.last_mut().unwrap()
     }
 
     fn handle_text(&mut self, text: &[u8]) -> Result<(), ReadError> {
         if let Expect::Text = self.expect {
-            let mut top = self.peek_mut();
+            let mut top = self.last_mut();
             macro_rules! convert {
                 ($t:path) => {{
                     top = &mut FromStr::from_str(from_utf8(text)?)
-                            .map($t)
-                            .or(Err(ReadError::ParseError))?;
-    
-                            Ok(())
+                        .map($t)
+                        .or(Err(ReadError::ParseError))?;
+                        Ok(())
                 };
             }}
             match top {
@@ -160,29 +180,29 @@ impl<'a> ParamStack<'a> {
                 ParamKind::Hash(_) => convert!(ParamKind::Hash),
                 ParamKind::Str(_) => convert!(ParamKind::Str),
                 // Note for readers
-                // Expect is only ever set to Text after reading a value-type open tag
+                // Expect is only set to Text after reading a value-type open tag
                 // The two cases below are designed to be impossible
                 ParamKind::List(_) => unreachable!(),
                 ParamKind::Struct(_) => unreachable!(),
             }
         } else if text.len() == 0 {
+            // empty text event being sent from quick-xml is meaningless
             Ok(())
         } else {
-            Err(ReadError::UnexpectedEvent(self.expect))
+            Err(ReadError::from(&self.expect))
         }
     }
 }
 
 /// XML Reading state handling
 #[derive(Debug, Clone)]
-enum Expect<'a> {
+pub enum Expect<'a> {
     /// Should only be used at the start of the file
     Struct,
-    /// Any open tag representing a param
-    OpenTag,
-    /// 
+    /// After reading a list or struct, expects either the close tag
+    /// Or any open tag for a new param
     OpenOrCloseTag(&'a [u8]),
-    /// Contains the name of the tag last opened.
+    /// After parsing a text event out of a value-type param, expects this close tag.
     /// Instead of a stack of strings, this gets set when the stack is changed
     CloseTag(&'a [u8]),
     /// Used for the inside of value-type params
@@ -194,14 +214,14 @@ pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadError
     let mut reader = Reader::from_reader(buf_reader);
     reader.expand_empty_elements(true);
     let mut buf = Vec::with_capacity(0x100);
-    let stack = Vec::<ParamKind>::with_capacity(0x100);
+    let mut stack = Vec::<ParamKind>::with_capacity(0x100);
 
     loop {
         match reader.read_event(&mut buf)? {
             Event::Start(start) => {
-                match start.name() {
+                // match start.name() {
 
-                }
+                // }
             }
             Event::Text(text) => {
 
@@ -212,6 +232,7 @@ pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadError
             Event::Eof => {
 
             }
+            _ => unimplemented!(),
         }
 
         buf.clear();
