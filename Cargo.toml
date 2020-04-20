@@ -11,14 +11,12 @@ path = "src/lib/lib.rs"
 [[bin]]
 name = "param-xml"
 path = "src/param-xml/main.rs"
-required-features = ["param-xml"]
-
-[bin.dependencies]
-
+required-features = ["param-xml", "main"]
 
 [features]
-default = [ "param-xml" ]
-param-xml = [ "quick-xml" ]
+default = ["main"]
+param-xml = ["quick-xml"]
+main = ["param-xml", "structopt"]
 
 [dependencies]
 byteorder = "^1.3"
@@ -28,3 +26,4 @@ serde = { version = "^1", features = ["derive"] }
 strum = "^0.18"
 strum_macros = "^0.18"
 quick-xml = { version = "^0.18.1", optional = true }
+structopt = { version = "^0.3", optional = true }
