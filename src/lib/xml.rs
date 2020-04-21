@@ -1,5 +1,6 @@
 use crate::param::{ParamKind, ParamList, ParamStruct};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::events::attributes::Attributes;
 use quick_xml::{Reader, Writer};
 
 use std::io::{BufRead, Write, Error as ioError};
@@ -20,8 +21,12 @@ pub enum ReadError {
     MissingHash,
     /// For the first tag after XML declaration, tag must be 'struct'
     ExpectedStructTag,
+    /// After reading a struct or list tag, reader either expects a new open tag
+    /// or that param's own close tag
     ExpectedOpenOrCloseTag(String),
+    /// For after reading a value-type param and its value, expects the close tag
     ExpectedCloseTag(String),
+    /// After reading the open tag for a value-type param, expects the text value
     ExpectedText,
 }
 
@@ -95,12 +100,12 @@ struct ParamStack<'a> {
 }
 
 impl<'a> ParamStack<'a> {
-    fn new() -> Self {
-        Self {
-            stack: Vec::new(),
-            expect: Expect::Struct,
-        }
-    }
+    // fn new() -> Self {
+    //     Self {
+    //         stack: Vec::new(),
+    //         expect: Expect::Struct,
+    //     }
+    // }
 
     fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -109,7 +114,7 @@ impl<'a> ParamStack<'a> {
         }
     }
 
-    fn push(&mut self, node_name: &'a [u8]) -> Result<(), ReadError> {
+    fn push(&mut self, node_name: &[u8], attributes: Attributes) -> Result<(), ReadError> {
         match self.expect {
             Expect::Struct => {
                 if node_name == b"struct" {
@@ -120,38 +125,70 @@ impl<'a> ParamStack<'a> {
                 }
             }
             Expect::OpenOrCloseTag(_) => {
-                self.stack.push(
-                    match node_name {
-                        b"bool" => ParamKind::Bool(Default::default()),
-                        b"sbyte" => ParamKind::I8(Default::default()),
-                        b"byte" => ParamKind::U8(Default::default()),
-                        b"short" => ParamKind::I16(Default::default()),
-                        b"ushort" => ParamKind::U16(Default::default()),
-                        b"int" => ParamKind::I32(Default::default()),
-                        b"uint" => ParamKind::U32(Default::default()),
-                        b"float" => ParamKind::Float(Default::default()),
-                        b"hash40" => ParamKind::Hash(Default::default()),
-                        b"string" => ParamKind::Str(Default::default()),
-                        b"list" => ParamKind::List(Default::default()),
-                        b"struct" => ParamKind::Struct(Default::default()),
-                        _ => return Err(ReadError::UnknownOpenTag(
-                            String::from(from_utf8(node_name)?))
-                        ),
-                });
+                let p = match node_name {
+                    b"bool" => ParamKind::Bool(Default::default()),
+                    b"sbyte" => ParamKind::I8(Default::default()),
+                    b"byte" => ParamKind::U8(Default::default()),
+                    b"short" => ParamKind::I16(Default::default()),
+                    b"ushort" => ParamKind::U16(Default::default()),
+                    b"int" => ParamKind::I32(Default::default()),
+                    b"uint" => ParamKind::U32(Default::default()),
+                    b"float" => ParamKind::Float(Default::default()),
+                    b"hash40" => ParamKind::Hash(Default::default()),
+                    b"string" => ParamKind::Str(Default::default()),
+                    b"list" => ParamKind::List(Default::default()),
+                    b"struct" => ParamKind::Struct(Default::default()),
+                    _ => return Err(ReadError::UnknownOpenTag(
+                        String::from(from_utf8(node_name)?))
+                    ),
+                };
 
+                if let ParamKind::Struct(s) = self.last_mut() {
+                    let hash = attributes
+                        .collect::<Result<Vec<_>, _>>()?
+                        .iter()
+                        .find(|attr| attr.key == b"hash")
+                        .ok_or(ReadError::MissingHash)
+                        .and_then(|attr| {
+                            FromStr::from_str(from_utf8(&attr.value)?)
+                                .or(Err(ReadError::MissingHash))
+                        })?;
+                    // push a temporary param into the struct with the real hash
+                    // because we don't have a way to store this for later, when
+                    // the close tag is reached (unless I make something for it)
+                    s.push((hash, ParamKind::Bool(Default::default())));
+                }
+
+                self.stack.push(p);
                 Ok(())
             }
-            _ => unreachable!(),
+            Expect::CloseTag(name) => {
+                Err(ReadError::ExpectedCloseTag(String::from(from_utf8(name)?)))
+            }
+            Expect::Text => unreachable!(),
         }
     }
 
     fn pop(&mut self, node_name: &[u8]) -> Result<(), ReadError> {
-        unimplemented!()
+        match self.expect {
+            Expect::CloseTag(name) => {
+
+            }
+            Expect::OpenOrCloseTag(name) => {
+
+            }
+            Expect::Struct => return Err(ReadError::ExpectedStructTag),
+            // we can't expect a text event here because quick-xml always creates a text event between tags
+            // which will be handled in another function and change expect respectively
+            _ => unreachable!(),
+        }
+
+        Ok(())
     }
 
-    fn peek(&self) -> &ParamKind {
-        &self.stack[self.stack.len() - 1]
-    }
+    // fn last(&self) -> &ParamKind {
+    //     self.stack.last().unwrap()
+    // }
 
     fn last_mut(&mut self) -> &mut ParamKind {
         self.stack.last_mut().unwrap()
@@ -196,7 +233,7 @@ impl<'a> ParamStack<'a> {
 
 /// XML Reading state handling
 #[derive(Debug, Clone)]
-pub enum Expect<'a> {
+enum Expect<'a> {
     /// Should only be used at the start of the file
     Struct,
     /// After reading a list or struct, expects either the close tag
@@ -214,22 +251,13 @@ pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadError
     let mut reader = Reader::from_reader(buf_reader);
     reader.expand_empty_elements(true);
     let mut buf = Vec::with_capacity(0x100);
-    let mut stack = Vec::<ParamKind>::with_capacity(0x100);
+    let mut stack = ParamStack::with_capacity(0x100);
 
     loop {
         match reader.read_event(&mut buf)? {
-            Event::Start(start) => {
-                // match start.name() {
-
-                // }
-            }
-            Event::Text(text) => {
-
-            }
+            Event::Start(start) => stack.push(start.name(), start.attributes())?,
+            Event::Text(text) => stack.handle_text(&*text)?,
             Event::End(end) => {
-
-            }
-            Event::Eof => {
 
             }
             _ => unimplemented!(),
