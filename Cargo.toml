@@ -11,12 +11,12 @@ path = "src/lib/lib.rs"
 [[bin]]
 name = "param-xml"
 path = "src/param-xml/main.rs"
-required-features = ["param-xml", "main"]
+required-features = ["xml", "main"]
 
 [features]
 default = ["main"]
-param-xml = ["quick-xml"]
-main = ["param-xml", "structopt"]
+xml = ["quick-xml"]
+main = ["xml", "structopt"]
 
 [dependencies]
 byteorder = "^1.3"
