@@ -1,7 +1,7 @@
 mod asm;
 mod disasm;
 pub mod param;
-#[cfg(feature = "param-xml")]
+#[cfg(feature = "xml")]
 pub mod xml;
 
 use std::fs::{read, write};
