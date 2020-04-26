@@ -3,7 +3,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::events::attributes::Attributes;
 use quick_xml::{Reader, Writer};
 
-use std::io::{BufRead, Read, Cursor, Write, Error as ioError};
+use std::io::{BufRead, Read, Write, Error as ioError};
 use std::str::{from_utf8, FromStr, Utf8Error};
 
 /// Write a ParamStruct as XML
@@ -100,20 +100,53 @@ fn struct_to_node<W: Write>(
 }
 
 /// Read a ParamStruct from XML
-pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadError> {
+pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, (ReadError, usize)> {
     let mut reader = Reader::from_reader(buf_reader);
     reader.expand_empty_elements(true);
     reader.trim_text(true);
     let mut buf = Vec::with_capacity(0x100);
     let mut stack = ParamStack::with_capacity(0x100);
 
-    let res = read_xml_loop(&mut reader, &mut buf, &mut stack);
+    match read_xml_loop(&mut reader, &mut buf, &mut stack) {
+        Ok(p) => Ok(p),
+        Err(e) => Err((e, reader.buffer_position()))
+    }
+}
 
-    if res.is_err() {
-        println!("Error occurred. Position in data stream: {}", reader.buffer_position())
+pub fn print_xml_error<R: Read>(reader: R, position: usize) -> Result<(), ioError> {
+    let mut line_so_far = Vec::with_capacity(0x40);
+    let mut row = 1;
+    let mut error_column = 1;
+    let mut reached_position = false;
+    for (index, byte_res) in reader.bytes().enumerate() {
+        let byte = byte_res?;
+        if !reached_position && index >= position {
+            reached_position = true;
+            error_column = line_so_far.len();
+        }
+
+        if byte == b'\n' {
+            if reached_position {
+                break;
+            }
+            line_so_far.clear();
+            row += 1;
+        } else {
+            line_so_far.push(byte);
+        }
+    }
+    if !reached_position {
+        panic!("The given position could not but reached inside the reader provided")
     }
 
-    res
+    let first_part = String::from_utf8_lossy(&line_so_far[0..error_column]);
+    let second_part = String::from_utf8_lossy(&line_so_far[error_column..]);
+
+    println!("On line {}:", row);
+    println!("{}{}", first_part, second_part);
+    println!("{}^", " ".repeat(first_part.len()));
+
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -141,17 +174,6 @@ pub enum ReadError {
     /// Any XML event not handled
     UnhandledEvent(QuickXmlEventType)
 }
-
-// impl ReadError {
-//     pub fn print_location<R: Read>(&self, input: &R, position: usize) -> Result<(), ioError> {
-//         // get line number
-//         let mut line = 1;
-//         // print line and show position by using a ^ caret sign
-//         let reader = Cursor::new(input);
-    
-//         Ok(())
-//     }
-// }
 
 // Bad practice to just copy event names?
 // I need to have an "expected" event type as well so I can't just use Event<'a>

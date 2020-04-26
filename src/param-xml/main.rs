@@ -3,12 +3,12 @@ mod args;
 use args::{Args, Mode};
 use prc::{open, save};
 use prc::hash40::{read_custom_labels, set_custom_labels};
-use prc::xml::{write_xml, read_xml, ReadError};
+use prc::xml::{write_xml, read_xml, print_xml_error, ReadError};
 use structopt::StructOpt;
 use quick_xml::Error;
 
 use std::fs::File;
-use std::io::{BufWriter, BufReader};
+use std::io::{BufWriter, BufReader, Seek, SeekFrom};
 use std::time::Instant;
 
 fn main() {
@@ -33,7 +33,7 @@ fn main() {
         Mode::Disasm { file } => {
             let now = Instant::now();
             if let Err(e) = to_xml(&file, args.out.as_deref().unwrap_or("out.xml")) {
-                println!("Error in prc-to-xml step: \n{:?}", e);
+                println!("Error in prc-to-xml step: \n{:#?}", e);
             } else {
                 println!("Completed in {}", now.elapsed().as_secs_f32())
             }
@@ -48,8 +48,17 @@ fn to_xml(in_path: &str, out_path: &str) -> Result<(), Error> {
 }
 
 fn to_prc(in_path: &str, out_path: &str) -> Result<(), ReadError> {
-    let mut reader = BufReader::new(File::open(in_path)?);
-    let p = read_xml(&mut reader)?;
-    save(out_path, &p)?;
-    Ok(())
+    let mut file = File::open(in_path)?;
+    let mut reader = BufReader::new(&file);
+    match read_xml(&mut reader) {
+        Ok(p) => {
+            save(out_path, &p)?;
+            Ok(())
+        },
+        Err((err, position)) => {
+            file.seek(SeekFrom::Start(0))?;
+            print_xml_error(&file, position)?;
+            Err(err)
+        }
+    }
 }

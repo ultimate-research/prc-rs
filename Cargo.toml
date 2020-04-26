@@ -11,10 +11,10 @@ path = "src/lib/lib.rs"
 [[bin]]
 name = "param-xml"
 path = "src/param-xml/main.rs"
-required-features = ["xml", "main"]
+required-features = ["main"]
 
 [features]
-default = ["xml"]
+default = ["main"]
 xml = ["quick-xml"]
 main = ["xml", "structopt"]
 
