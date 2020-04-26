@@ -3,8 +3,118 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::events::attributes::Attributes;
 use quick_xml::{Reader, Writer};
 
-use std::io::{BufRead, Write, Error as ioError};
+use std::io::{BufRead, Read, Cursor, Write, Error as ioError};
 use std::str::{from_utf8, FromStr, Utf8Error};
+
+/// Write a ParamStruct as XML
+pub fn write_xml<W: Write>(param: &ParamStruct, writer: &mut W) -> Result<(), quick_xml::Error> {
+    let mut xml_writer = Writer::new_with_indent(writer, b' ', 2);
+    xml_writer.write_event(Event::Decl(BytesDecl::new(b"1.0", Some(b"utf-8"), None)))?;
+    struct_to_node(param, &mut xml_writer, None)?;
+    Ok(())
+}
+
+fn param_to_node<W: Write>(
+    param: &ParamKind,
+    writer: &mut Writer<W>,
+    attr: Option<(&str, &str)>,
+) -> Result<(), quick_xml::Error> {
+    macro_rules! write_constant {
+        ($tag_name:literal, $value:expr) => {{
+            let name = $tag_name;
+            let mut start = BytesStart::borrowed_name(name);
+            if let Some(a) = attr {
+                start.push_attribute(a);
+            }
+            writer.write_event(Event::Start(start))?;
+            // Is there any shorter way of expressing this?
+            writer.write_event(Event::Text(BytesText::from_plain_str(&format!(
+                "{}",
+                $value
+            ))))?;
+            writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
+        }};
+    };
+    match param {
+        ParamKind::Bool(val) => write_constant!(b"bool", val),
+        ParamKind::I8(val) => write_constant!(b"sbyte", val),
+        ParamKind::U8(val) => write_constant!(b"byte", val),
+        ParamKind::I16(val) => write_constant!(b"short", val),
+        ParamKind::U16(val) => write_constant!(b"ushort", val),
+        ParamKind::I32(val) => write_constant!(b"int", val),
+        ParamKind::U32(val) => write_constant!(b"uint", val),
+        ParamKind::Float(val) => write_constant!(b"float", val),
+        ParamKind::Hash(val) => write_constant!(b"hash40", val),
+        ParamKind::Str(val) => write_constant!(b"string", val),
+        ParamKind::List(val) => list_to_node(val, writer, attr)?,
+        ParamKind::Struct(val) => struct_to_node(val, writer, attr)?,
+    };
+
+    Ok(())
+}
+
+fn list_to_node<W: Write>(
+    param: &ParamList,
+    writer: &mut Writer<W>,
+    attr: Option<(&str, &str)>,
+) -> Result<(), quick_xml::Error> {
+    let name = b"list";
+    let mut start = BytesStart::borrowed_name(name);
+    if let Some(a) = attr {
+        start.push_attribute(a);
+    }
+
+    if param.is_empty() {
+        writer.write_event(Event::Empty(start))?;
+    } else {
+        writer.write_event(Event::Start(start))?;
+        for (index, child) in param.iter().enumerate() {
+            param_to_node(child, writer, Some(("index", &format!("{}", index))))?;
+        }
+        writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
+    }
+    Ok(())
+}
+
+fn struct_to_node<W: Write>(
+    param: &ParamStruct,
+    writer: &mut Writer<W>,
+    attr: Option<(&str, &str)>,
+) -> Result<(), quick_xml::Error> {
+    let name = b"struct";
+    let mut start = BytesStart::borrowed_name(name);
+    if let Some(a) = attr {
+        start.push_attribute(a);
+    }
+
+    if param.is_empty() {
+        writer.write_event(Event::Empty(start))?;
+    } else {
+        writer.write_event(Event::Start(start))?;
+        for (hash, child) in param.iter() {
+            param_to_node(child, writer, Some(("hash", &format!("{}", hash))))?;
+        }
+        writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
+    }
+    Ok(())
+}
+
+/// Read a ParamStruct from XML
+pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadError> {
+    let mut reader = Reader::from_reader(buf_reader);
+    reader.expand_empty_elements(true);
+    reader.trim_text(true);
+    let mut buf = Vec::with_capacity(0x100);
+    let mut stack = ParamStack::with_capacity(0x100);
+
+    let res = read_xml_loop(&mut reader, &mut buf, &mut stack);
+
+    if res.is_err() {
+        println!("Error occurred. Position in data stream: {}", reader.buffer_position())
+    }
+
+    res
+}
 
 #[derive(Debug)]
 /// Types of errors encountered the XML param file
@@ -31,6 +141,17 @@ pub enum ReadError {
     /// Any XML event not handled
     UnhandledEvent(QuickXmlEventType)
 }
+
+// impl ReadError {
+//     pub fn print_location<R: Read>(&self, input: &R, position: usize) -> Result<(), ioError> {
+//         // get line number
+//         let mut line = 1;
+//         // print line and show position by using a ^ caret sign
+//         let reader = Cursor::new(input);
+    
+//         Ok(())
+//     }
+// }
 
 // Bad practice to just copy event names?
 // I need to have an "expected" event type as well so I can't just use Event<'a>
@@ -102,14 +223,6 @@ impl<'a> From<&'a Expect<'a>> for ReadError {
             Expect::Text => Self::ExpectedText,
         }
     }
-}
-
-/// Write a ParamStruct as XML
-pub fn write_xml<W: Write>(param: &ParamStruct, writer: &mut W) -> Result<(), quick_xml::Error> {
-    let mut xml_writer = Writer::new_with_indent(writer, b' ', 2);
-    xml_writer.write_event(Event::Decl(BytesDecl::new(b"1.0", Some(b"utf-8"), None)))?;
-    struct_to_node(param, &mut xml_writer, None)?;
-    Ok(())
 }
 
 #[derive(Debug)]
@@ -292,23 +405,6 @@ enum Expect<'a> {
     Text,
 }
 
-/// Read a ParamStruct from XML
-pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadError> {
-    let mut reader = Reader::from_reader(buf_reader);
-    reader.expand_empty_elements(true);
-    reader.trim_text(true);
-    let mut buf = Vec::with_capacity(0x100);
-    let mut stack = ParamStack::with_capacity(0x100);
-
-    let res = read_xml_loop(&mut reader, &mut buf, &mut stack);
-
-    if res.is_err() {
-        println!("Error occurred. Position in data stream: {}", reader.buffer_position())
-    }
-
-    res
-}
-
 fn read_xml_loop<R: BufRead>(reader: &mut Reader<R>, buf: &mut Vec<u8>, stack: &mut ParamStack) -> Result<ParamStruct, ReadError> {
     loop {
         let event = reader.read_event(buf)?;
@@ -326,91 +422,4 @@ fn read_xml_loop<R: BufRead>(reader: &mut Reader<R>, buf: &mut Vec<u8>, stack: &
 
         buf.clear();
     }
-}
-
-// METHODS FOR WRITING
-
-fn param_to_node<W: Write>(
-    param: &ParamKind,
-    writer: &mut Writer<W>,
-    attr: Option<(&str, &str)>,
-) -> Result<(), quick_xml::Error> {
-    macro_rules! write_constant {
-        ($tag_name:literal, $value:expr) => {{
-            let name = $tag_name;
-            let mut start = BytesStart::borrowed_name(name);
-            if let Some(a) = attr {
-                start.push_attribute(a);
-            }
-            writer.write_event(Event::Start(start))?;
-            // Is there any shorter way of expressing this?
-            writer.write_event(Event::Text(BytesText::from_plain_str(&format!(
-                "{}",
-                $value
-            ))))?;
-            writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
-        }};
-    };
-    match param {
-        ParamKind::Bool(val) => write_constant!(b"bool", val),
-        ParamKind::I8(val) => write_constant!(b"sbyte", val),
-        ParamKind::U8(val) => write_constant!(b"byte", val),
-        ParamKind::I16(val) => write_constant!(b"short", val),
-        ParamKind::U16(val) => write_constant!(b"ushort", val),
-        ParamKind::I32(val) => write_constant!(b"int", val),
-        ParamKind::U32(val) => write_constant!(b"uint", val),
-        ParamKind::Float(val) => write_constant!(b"float", val),
-        ParamKind::Hash(val) => write_constant!(b"hash40", val),
-        ParamKind::Str(val) => write_constant!(b"string", val),
-        ParamKind::List(val) => list_to_node(val, writer, attr)?,
-        ParamKind::Struct(val) => struct_to_node(val, writer, attr)?,
-    };
-
-    Ok(())
-}
-
-fn list_to_node<W: Write>(
-    param: &ParamList,
-    writer: &mut Writer<W>,
-    attr: Option<(&str, &str)>,
-) -> Result<(), quick_xml::Error> {
-    let name = b"list";
-    let mut start = BytesStart::borrowed_name(name);
-    if let Some(a) = attr {
-        start.push_attribute(a);
-    }
-
-    if param.is_empty() {
-        writer.write_event(Event::Empty(start))?;
-    } else {
-        writer.write_event(Event::Start(start))?;
-        for (index, child) in param.iter().enumerate() {
-            param_to_node(child, writer, Some(("index", &format!("{}", index))))?;
-        }
-        writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
-    }
-    Ok(())
-}
-
-fn struct_to_node<W: Write>(
-    param: &ParamStruct,
-    writer: &mut Writer<W>,
-    attr: Option<(&str, &str)>,
-) -> Result<(), quick_xml::Error> {
-    let name = b"struct";
-    let mut start = BytesStart::borrowed_name(name);
-    if let Some(a) = attr {
-        start.push_attribute(a);
-    }
-
-    if param.is_empty() {
-        writer.write_event(Event::Empty(start))?;
-    } else {
-        writer.write_event(Event::Start(start))?;
-        for (hash, child) in param.iter() {
-            param_to_node(child, writer, Some(("hash", &format!("{}", hash))))?;
-        }
-        writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
-    }
-    Ok(())
 }

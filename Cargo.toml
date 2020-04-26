@@ -14,7 +14,7 @@ path = "src/param-xml/main.rs"
 required-features = ["xml", "main"]
 
 [features]
-default = ["main"]
+default = ["xml"]
 xml = ["quick-xml"]
 main = ["xml", "structopt"]
 
