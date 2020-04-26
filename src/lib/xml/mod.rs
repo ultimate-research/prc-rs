@@ -365,9 +365,12 @@ impl<'a> ParamStack<'a> {
                 }
             }
             Expect::Struct => return Err(ReadError::ExpectedStructTag),
-            // we can't expect a text event here because quick-xml always creates a text event between tags
-            // which will be handled in another function and change expect respectively
-            _ => unreachable!(),
+            // if we get a close tag but no text, default behavior is to let
+            // the param keeps its default value. Then we just 
+            Expect::Text => {
+                self.handle_text(b"")?;
+                self.pop(node_name)?;
+            },
         }
 
         Ok(None)
@@ -378,9 +381,11 @@ impl<'a> ParamStack<'a> {
             let top = self.last_mut();
             macro_rules! convert {
                 ($t:path, $tag_name:literal) => {{
-                    *top = FromStr::from_str(from_utf8(text)?)
-                        .map($t)
-                        .or(Err(ReadError::ParseError))?;
+                    if !text.is_empty() {
+                        *top = FromStr::from_str(from_utf8(text)?)
+                            .map($t)
+                            .or(Err(ReadError::ParseError))?;
+                    }
                     self.expect = Expect::CloseTag($tag_name);
                     Ok(())
                 };
@@ -403,9 +408,6 @@ impl<'a> ParamStack<'a> {
                 ParamKind::List(_) => unreachable!(),
                 ParamKind::Struct(_) => unreachable!(),
             }
-        } else if text.is_empty() {
-            // empty text event being sent from quick-xml is meaningless
-            Ok(())
         } else {
             Err(ReadError::from(&self.expect))
         }
