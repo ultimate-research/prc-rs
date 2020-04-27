@@ -55,10 +55,10 @@ fn to_prc(in_path: &str, out_path: &str) -> Result<(), ReadError> {
             save(out_path, &p)?;
             Ok(())
         },
-        Err((err, position)) => {
+        Err(e) => {
             file.seek(SeekFrom::Start(0))?;
-            print_xml_error(&file, position)?;
-            Err(err)
+            print_xml_error(&file, e.start, e.end)?;
+            Err(e.error)
         }
     }
 }

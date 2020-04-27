@@ -100,53 +100,92 @@ fn struct_to_node<W: Write>(
 }
 
 /// Read a ParamStruct from XML
-pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, (ReadError, usize)> {
+pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadErrorWrapper> {
     let mut reader = Reader::from_reader(buf_reader);
     reader.expand_empty_elements(true);
     reader.trim_text(true);
     let mut buf = Vec::with_capacity(0x100);
     let mut stack = ParamStack::with_capacity(0x100);
 
-    match read_xml_loop(&mut reader, &mut buf, &mut stack) {
-        Ok(p) => Ok(p),
-        Err(e) => Err((e, reader.buffer_position()))
-    }
+    read_xml_loop(&mut reader, &mut buf, &mut stack)
 }
 
-pub fn print_xml_error<R: Read>(reader: R, position: usize) -> Result<(), ioError> {
+pub fn print_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<(), ioError> {
+    if start > end {
+        panic!("The provided start position = {} must be <= the provided end position = {}", start, end)
+    }
+
+    #[derive(PartialEq)]
+    enum Stage { One, Two, Three }
+    let mut stage = Stage::One;
     let mut line_so_far = Vec::with_capacity(0x40);
-    let mut row = 1;
-    let mut error_column = 1;
-    let mut reached_position = false;
-    for (index, byte_res) in reader.bytes().enumerate() {
+    let mut line_start = 0;
+    let mut line_num = 1;
+
+    for (position, byte_res) in reader.bytes().enumerate() {
         let byte = byte_res?;
-        if !reached_position && index >= position {
-            reached_position = true;
-            error_column = line_so_far.len();
-        }
-
-        if byte == b'\n' {
-            if reached_position {
-                break;
+        match stage {
+            Stage::One => {
+                if position >= start {
+                    stage = Stage::Two;
+                    line_so_far.push(byte);
+                } else if byte == b'\n' {
+                    line_so_far.clear();
+                    line_start = position;
+                    line_num += 1;
+                } else {
+                    line_so_far.push(byte);
+                }
             }
-            line_so_far.clear();
-            row += 1;
-        } else {
-            line_so_far.push(byte);
+            Stage::Two => {
+                line_so_far.push(byte);
+                if position >= end {
+                    stage = Stage::Three;
+                }
+            }
+            Stage::Three => {
+                if byte == b'\n' {
+                    break;
+                } else {
+                    line_so_far.push(byte);
+                }
+            }
         }
     }
-    if !reached_position {
-        panic!("The given position could not but reached inside the reader provided")
+    if stage != Stage::Three {
+        panic!("The provided start or end values where longer than the provided stream")
     }
 
-    let first_part = String::from_utf8_lossy(&line_so_far[0..error_column]);
-    let second_part = String::from_utf8_lossy(&line_so_far[error_column..]);
+    let first = String::from_utf8_lossy(&line_so_far[0..start - line_start]);
+    let middle = String::from_utf8_lossy(&line_so_far[start - line_start..end - line_start]);
+    let last = String::from_utf8_lossy(&line_so_far[end - line_start..]);
 
-    println!("On line {}:", row);
-    println!("{}{}", first_part, second_part);
-    println!("{}^", " ".repeat(first_part.len()));
+    let combined = format!("{}{}{}", first, middle, last);
+    let max_line_num = line_num + combined.lines().count() - 1;
+    let line_count_length = format!("{}", max_line_num).len();
+    let mut last_line = String::default();
+
+    println!("{}v", " ".repeat(line_count_length + 1 + first.len()));
+    for (index, line) in combined.lines().enumerate() {
+        last_line = format!("{:len$}: {}", index + line_num, line, len=line_count_length);
+        println!("{}", last_line);
+    }
+    println!("{}^", " ".repeat(last_line.len() - last.len() - 1));
 
     Ok(())
+}
+
+#[derive(Debug)]
+pub struct ReadErrorWrapper {
+    pub error: ReadError,
+    pub start: usize,
+    pub end: usize,
+}
+
+impl ReadErrorWrapper {
+    pub fn new(error: ReadError, start: usize, end: usize) -> Self {
+        Self { error, start, end }
+    }
 }
 
 #[derive(Debug)]
@@ -429,19 +468,29 @@ enum Expect<'a> {
     Text,
 }
 
-fn read_xml_loop<R: BufRead>(reader: &mut Reader<R>, buf: &mut Vec<u8>, stack: &mut ParamStack) -> Result<ParamStruct, ReadError> {
+fn read_xml_loop<R: BufRead>(reader: &mut Reader<R>, buf: &mut Vec<u8>, stack: &mut ParamStack) -> Result<ParamStruct, ReadErrorWrapper> {
+    let mut pre_position;
     loop {
-        let event = reader.read_event(buf)?;
+        pre_position = reader.buffer_position();
+        macro_rules! try_with_position {
+            ($run:expr) => {
+                match $run {
+                    Ok(ok) => ok,
+                    Err(e) => return Err(ReadErrorWrapper::new(ReadError::from(e), pre_position, reader.buffer_position() - 1)),
+                }
+            };
+        }
+        let event = try_with_position!(reader.read_event(buf));
         match event {
-            Event::Start(start) => stack.push(start.name(), start.attributes())?,
-            Event::Text(text) => stack.handle_text(&*text)?,
+            Event::Start(start) => try_with_position!(stack.push(start.name(), start.attributes())),
+            Event::Text(text) => try_with_position!(stack.handle_text(&*text)),
             Event::End(end) => {
-                if let Some(p) = stack.pop(end.name())? {
+                if let Some(p) = try_with_position!(stack.pop(end.name())) {
                     return Ok(p)
                 }
             }
             Event::Decl(_) => {}
-            _ => return Err(ReadError::UnhandledEvent(QuickXmlEventType::from(&event))),
+            _ => return Err(ReadErrorWrapper::new(ReadError::UnhandledEvent(QuickXmlEventType::from(&event)), pre_position, reader.buffer_position())),
         }
 
         buf.clear();
