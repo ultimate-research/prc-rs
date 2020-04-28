@@ -25,7 +25,7 @@ fn main() {
         Mode::Asm { file } => {
             let now = Instant::now();
             if let Err(e) = to_prc(&file, args.out.as_deref().unwrap_or("out.prc")) {
-                println!("Error in xml-to-prc step: \n{:?}", e);
+                eprintln!("Error in xml-to-prc step: \n{:?}", e);
             } else {
                 println!("Completed in {}", now.elapsed().as_secs_f32())
             }
@@ -33,7 +33,7 @@ fn main() {
         Mode::Disasm { file } => {
             let now = Instant::now();
             if let Err(e) = to_xml(&file, args.out.as_deref().unwrap_or("out.xml")) {
-                println!("Error in prc-to-xml step: \n{:#?}", e);
+                eprintln!("Error in prc-to-xml step: \n{:#?}", e);
             } else {
                 println!("Completed in {}", now.elapsed().as_secs_f32())
             }
@@ -57,7 +57,7 @@ fn to_prc(in_path: &str, out_path: &str) -> Result<(), ReadError> {
         },
         Err(e) => {
             file.seek(SeekFrom::Start(0))?;
-            print_xml_error(&file, e.start, e.end)?;
+            print_xml_error(&mut file, e.start, e.end)?;
             Err(e.error)
         }
     }

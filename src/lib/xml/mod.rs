@@ -165,12 +165,12 @@ pub fn print_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<(
     let line_count_length = format!("{}", max_line_num).len();
     let mut last_line = String::default();
 
-    println!("{}v", " ".repeat(line_count_length + 1 + first.len()));
+    eprintln!("{}v", " ".repeat(line_count_length + 1 + first.len()));
     for (index, line) in combined.lines().enumerate() {
         last_line = format!("{:len$}: {}", index + line_num, line, len=line_count_length);
-        println!("{}", last_line);
+        eprintln!("{}", last_line);
     }
-    println!("{}^", " ".repeat(last_line.len() - last.len() - 1));
+    eprintln!("{}^", " ".repeat(last_line.len() - last.len() - 1));
 
     Ok(())
 }
