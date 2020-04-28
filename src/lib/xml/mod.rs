@@ -110,6 +110,7 @@ pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadError
     read_xml_loop(&mut reader, &mut buf, &mut stack)
 }
 
+/// Take information of source file and error position, and print the lines of the error
 pub fn print_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<(), ioError> {
     if start > end {
         panic!("The provided start position = {} must be <= the provided end position = {}", start, end)

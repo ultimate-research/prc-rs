@@ -1,7 +1,10 @@
 [package]
 name = "prc-rs"
 version = "1.0.0"
-authors = ["BenHall-7 <benjaminjahall@gmail.com>"]
+authors = ["BenHall-7 <benjaminjahall@gmail.com>", "jam1garner <jam1.mcleod@hotmail.com>"]
+description = "Library for working with PRC types in Smash Ultimate"
+license = "MIT"
+repository = "https://github.com/ultimate-research/prc-rs"
 edition = "2018"
 
 [lib]
