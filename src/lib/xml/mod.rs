@@ -394,11 +394,7 @@ impl<'a> ParamStack<'a> {
                     None => {
                         // first param on stack is guaranteed to be a struct
                         // so when we pop and there's nothing left, 'p' is that struct
-                        if let ParamKind::Struct(s) = p {
-                            return Ok(Some(s))
-                        } else {
-                            unreachable!()
-                        }
+                        return Ok(Some(p.unwrap_owned()))
                     },
                     _ => unreachable!(),
                 }

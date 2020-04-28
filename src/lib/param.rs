@@ -28,6 +28,8 @@ pub type ParamStruct = Vec<(Hash40, ParamKind)>;
 
 pub trait FromParam: Sized {
     fn from_param(param: &ParamKind) -> Option<&Self>;
+
+    fn from_param_owned(param: ParamKind) -> Option<Self>;
 }
 
 impl ParamKind {
@@ -35,8 +37,16 @@ impl ParamKind {
         <T>::from_param(self).unwrap()
     }
 
+    pub fn unwrap_owned<T: FromParam>(self) -> T {
+        <T>::from_param_owned(self).unwrap()
+    }
+
     pub fn get<T: FromParam>(&self) -> Option<&T> {
         <T>::from_param(self)
+    }
+
+    pub fn get_owned<T: FromParam>(self) -> Option<T> {
+        <T>::from_param_owned(self)
     }
 
     pub fn unwrap_as_hashmap(&self) -> Option<HashMap<Hash40, ParamKind>> {
@@ -56,6 +66,14 @@ macro_rules! impl_from_param {
         $(
             impl FromParam for $t {
                 fn from_param(param: &ParamKind) -> Option<&Self> {
+                    if let $param(val) = param {
+                        Some(val)
+                    } else {
+                        None
+                    }
+                }
+
+                fn from_param_owned(param: ParamKind) -> Option<Self> {
                     if let $param(val) = param {
                         Some(val)
                     } else {
