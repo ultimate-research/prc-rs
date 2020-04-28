@@ -1,6 +1,6 @@
 [package]
 name = "prc-rs"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["BenHall-7 <benjaminjahall@gmail.com>", "jam1garner <jam1.mcleod@hotmail.com>"]
 description = "Library for working with PRC types in Smash Ultimate"
 license = "MIT"

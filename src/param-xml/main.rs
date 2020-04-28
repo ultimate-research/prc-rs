@@ -3,7 +3,7 @@ mod args;
 use args::{Args, Mode};
 use prc::{open, save};
 use prc::hash40::{read_custom_labels, set_custom_labels};
-use prc::xml::{write_xml, read_xml, print_xml_error, ReadError};
+use prc::xml::{write_xml, read_xml, get_xml_error, ReadError};
 use structopt::StructOpt;
 use quick_xml::Error;
 
@@ -57,7 +57,7 @@ fn to_prc(in_path: &str, out_path: &str) -> Result<(), ReadError> {
         },
         Err(e) => {
             file.seek(SeekFrom::Start(0))?;
-            print_xml_error(&mut file, e.start, e.end)?;
+            eprint!("{}", get_xml_error(&mut file, e.start, e.end)?);
             Err(e.error)
         }
     }

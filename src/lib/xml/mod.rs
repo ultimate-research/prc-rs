@@ -3,7 +3,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::events::attributes::Attributes;
 use quick_xml::{Reader, Writer};
 
-use std::io::{BufRead, Read, Write, Error as ioError};
+use std::io::{BufRead, BufWriter, Read, Write, Error as ioError};
 use std::str::{from_utf8, FromStr, Utf8Error};
 
 /// Write a ParamStruct as XML
@@ -111,10 +111,12 @@ pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadError
 }
 
 /// Take information of source file and error position, and print the lines of the error
-pub fn print_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<(), ioError> {
+pub fn get_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<String, ioError> {
     if start > end {
         panic!("The provided start position = {} must be <= the provided end position = {}", start, end)
     }
+
+    let mut ret = String::default();
 
     #[derive(PartialEq)]
     enum Stage { One, Two, Three }
@@ -166,14 +168,14 @@ pub fn print_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<(
     let line_count_length = format!("{}", max_line_num).len();
     let mut last_line = String::default();
 
-    eprintln!("{}v", " ".repeat(line_count_length + 1 + first.len()));
+    ret.push_str(format!("{}v\n", " ".repeat(line_count_length + 1 + first.len())).as_ref());
     for (index, line) in combined.lines().enumerate() {
         last_line = format!("{:len$}: {}", index + line_num, line, len=line_count_length);
-        eprintln!("{}", last_line);
+        ret.push_str(format!("{}\n", last_line).as_ref());
     }
-    eprintln!("{}^", " ".repeat(last_line.len() - last.len() - 1));
+    ret.push_str(format!("{}^\n", " ".repeat(last_line.len() - last.len() - 1)).as_ref());
 
-    Ok(())
+    Ok(ret)
 }
 
 #[derive(Debug)]
