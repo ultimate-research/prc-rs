@@ -1,9 +1,9 @@
 use crate::param::{ParamKind, ParamList, ParamStruct};
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::events::attributes::Attributes;
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 
-use std::io::{BufRead, BufWriter, Read, Write, Error as ioError};
+use std::io::{BufRead, Error as ioError, Read, Write};
 use std::str::{from_utf8, FromStr, Utf8Error};
 
 /// Write a ParamStruct as XML
@@ -113,13 +113,20 @@ pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadError
 /// Take information of source file and error position, and print the lines of the error
 pub fn get_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<String, ioError> {
     if start > end {
-        panic!("The provided start position = {} must be <= the provided end position = {}", start, end)
+        panic!(
+            "The provided start position = {} must be <= the provided end position = {}",
+            start, end
+        )
     }
 
     let mut ret = String::default();
 
     #[derive(PartialEq)]
-    enum Stage { One, Two, Three }
+    enum Stage {
+        One,
+        Two,
+        Three,
+    }
     let mut stage = Stage::One;
     let mut line_so_far = Vec::with_capacity(0x40);
     let mut line_start = 0;
@@ -170,7 +177,12 @@ pub fn get_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<Str
 
     ret.push_str(format!("{}v\n", " ".repeat(line_count_length + 1 + first.len())).as_ref());
     for (index, line) in combined.lines().enumerate() {
-        last_line = format!("{:len$}: {}", index + line_num, line, len=line_count_length);
+        last_line = format!(
+            "{:len$}: {}",
+            index + line_num,
+            line,
+            len = line_count_length
+        );
         ret.push_str(format!("{}\n", last_line).as_ref());
     }
     ret.push_str(format!("{}^\n", " ".repeat(last_line.len() - last.len() - 1)).as_ref());
@@ -214,7 +226,7 @@ pub enum ReadError {
     /// After reading the open tag for a value-type param, expects the text value
     ExpectedText,
     /// Any XML event not handled
-    UnhandledEvent(QuickXmlEventType)
+    UnhandledEvent(QuickXmlEventType),
 }
 
 // Bad practice to just copy event names?
@@ -272,18 +284,14 @@ impl<'a> From<&'a Expect<'a>> for ReadError {
     fn from(f: &Expect) -> Self {
         match f {
             Expect::Struct => Self::ExpectedStructTag,
-            Expect::OpenOrCloseTag(value) => {
-                match from_utf8(value) {
-                    Ok(s) => Self::ExpectedOpenOrCloseTag(String::from(s)),
-                    Err(e) => Self::from(e)
-                }
+            Expect::OpenOrCloseTag(value) => match from_utf8(value) {
+                Ok(s) => Self::ExpectedOpenOrCloseTag(String::from(s)),
+                Err(e) => Self::from(e),
             },
-            Expect::CloseTag(value) => {
-                match from_utf8(value) {
-                    Ok(s) => Self::ExpectedCloseTag(String::from(s)),
-                    Err(e) => Self::from(e)
-                }
-            }
+            Expect::CloseTag(value) => match from_utf8(value) {
+                Ok(s) => Self::ExpectedCloseTag(String::from(s)),
+                Err(e) => Self::from(e),
+            },
             Expect::Text => Self::ExpectedText,
         }
     }
@@ -323,8 +331,8 @@ impl<'a> ParamStack<'a> {
                     ($p:path) => {{
                         self.expect = Expect::Text;
                         $p(Default::default())
-                    };
-                }}
+                    };};
+                }
                 let p = match node_name {
                     b"bool" => default!(ParamKind::Bool),
                     b"sbyte" => default!(ParamKind::I8),
@@ -344,9 +352,11 @@ impl<'a> ParamStack<'a> {
                         self.expect = Expect::OpenOrCloseTag(b"struct");
                         ParamKind::Struct(Default::default())
                     }
-                    _ => return Err(ReadError::UnknownOpenTag(
-                        String::from(from_utf8(node_name)?))
-                    ),
+                    _ => {
+                        return Err(ReadError::UnknownOpenTag(String::from(from_utf8(
+                            node_name,
+                        )?)))
+                    }
                 };
 
                 if let ParamKind::Struct(s) = self.last_mut() {
@@ -379,7 +389,7 @@ impl<'a> ParamStack<'a> {
         match self.expect {
             Expect::CloseTag(name) | Expect::OpenOrCloseTag(name) => {
                 if name != node_name {
-                    return Err(ReadError::UnmatchedCloseTag(String::from(from_utf8(name)?)))
+                    return Err(ReadError::UnmatchedCloseTag(String::from(from_utf8(name)?)));
                 }
                 // take the param off the stack
                 let p = self.stack.pop().unwrap();
@@ -397,18 +407,18 @@ impl<'a> ParamStack<'a> {
                     None => {
                         // first param on stack is guaranteed to be a struct
                         // so when we pop and there's nothing left, 'p' is that struct
-                        return Ok(Some(p.unwrap_owned()))
-                    },
+                        return Ok(Some(p.unwrap_owned()));
+                    }
                     _ => unreachable!(),
                 }
             }
             Expect::Struct => return Err(ReadError::ExpectedStructTag),
             // if we get a close tag but no text, default behavior is to let
-            // the param keeps its default value. Then we just 
+            // the param keeps its default value. Then we just
             Expect::Text => {
                 self.handle_text(b"")?;
                 self.pop(node_name)?;
-            },
+            }
         }
 
         Ok(None)
@@ -426,8 +436,8 @@ impl<'a> ParamStack<'a> {
                     }
                     self.expect = Expect::CloseTag($tag_name);
                     Ok(())
-                };
-            }}
+                };};
+            }
 
             match top {
                 ParamKind::Bool(_) => convert!(ParamKind::Bool, b"bool"),
@@ -467,7 +477,11 @@ enum Expect<'a> {
     Text,
 }
 
-fn read_xml_loop<R: BufRead>(reader: &mut Reader<R>, buf: &mut Vec<u8>, stack: &mut ParamStack) -> Result<ParamStruct, ReadErrorWrapper> {
+fn read_xml_loop<R: BufRead>(
+    reader: &mut Reader<R>,
+    buf: &mut Vec<u8>,
+    stack: &mut ParamStack,
+) -> Result<ParamStruct, ReadErrorWrapper> {
     let mut pre_position;
     loop {
         pre_position = reader.buffer_position();
@@ -475,7 +489,13 @@ fn read_xml_loop<R: BufRead>(reader: &mut Reader<R>, buf: &mut Vec<u8>, stack: &
             ($run:expr) => {
                 match $run {
                     Ok(ok) => ok,
-                    Err(e) => return Err(ReadErrorWrapper::new(ReadError::from(e), pre_position, reader.buffer_position() - 1)),
+                    Err(e) => {
+                        return Err(ReadErrorWrapper::new(
+                            ReadError::from(e),
+                            pre_position,
+                            reader.buffer_position() - 1,
+                        ))
+                    }
                 }
             };
         }
@@ -485,11 +505,17 @@ fn read_xml_loop<R: BufRead>(reader: &mut Reader<R>, buf: &mut Vec<u8>, stack: &
             Event::Text(text) => try_with_position!(stack.handle_text(&*text)),
             Event::End(end) => {
                 if let Some(p) = try_with_position!(stack.pop(end.name())) {
-                    return Ok(p)
+                    return Ok(p);
                 }
             }
             Event::Decl(_) => {}
-            _ => return Err(ReadErrorWrapper::new(ReadError::UnhandledEvent(QuickXmlEventType::from(&event)), pre_position, reader.buffer_position())),
+            _ => {
+                return Err(ReadErrorWrapper::new(
+                    ReadError::UnhandledEvent(QuickXmlEventType::from(&event)),
+                    pre_position,
+                    reader.buffer_position(),
+                ))
+            }
         }
 
         buf.clear();

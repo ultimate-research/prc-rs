@@ -1,14 +1,14 @@
 mod args;
 
 use args::{Args, Mode};
-use prc::{open, save};
 use prc::hash40::{read_custom_labels, set_custom_labels};
-use prc::xml::{write_xml, read_xml, get_xml_error, ReadError};
-use structopt::StructOpt;
+use prc::xml::{get_xml_error, read_xml, write_xml, ReadError};
+use prc::{open, save};
 use quick_xml::Error;
+use structopt::StructOpt;
 
 use std::fs::File;
-use std::io::{BufWriter, BufReader, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter, Seek, SeekFrom};
 use std::time::Instant;
 
 fn main() {
@@ -54,7 +54,7 @@ fn to_prc(in_path: &str, out_path: &str) -> Result<(), ReadError> {
         Ok(p) => {
             save(out_path, &p)?;
             Ok(())
-        },
+        }
         Err(e) => {
             file.seek(SeekFrom::Start(0))?;
             eprint!("{}", get_xml_error(&mut file, e.start, e.end)?);
