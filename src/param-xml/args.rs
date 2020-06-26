@@ -14,9 +14,9 @@ pub struct Args {
 
 #[derive(StructOpt)]
 pub enum Mode {
-    #[structopt(about = "Convert from motion_list to yaml")]
+    #[structopt(about = "Convert from prc to xml")]
     Disasm { file: String },
 
-    #[structopt(about = "Convert from yaml to motion_list")]
+    #[structopt(about = "Convert from xml to prc")]
     Asm { file: String },
 }
