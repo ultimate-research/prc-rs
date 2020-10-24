@@ -23,10 +23,8 @@ main = ["xml", "structopt"]
 
 [dependencies]
 byteorder = "^1.3"
-hash40 = "^0.4.2"
+hash40 = "^0.4.3"
 indexmap = "^1.2"
-serde = { version = "^1", features = ["derive"] }
-strum = "^0.18"
-strum_macros = "^0.18"
 quick-xml = { version = "^0.18.1", optional = true }
+serde = { version = "^1", features = ["derive"] }
 structopt = { version = "^0.3", optional = true }

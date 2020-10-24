@@ -1,11 +1,10 @@
 use hash40::Hash40;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use strum_macros::AsRefStr;
 
 pub const MAGIC: &[u8; 8] = b"paracobn"; //paracobn
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, AsRefStr)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum ParamKind {
     //index starts at 1
     Bool(bool),
