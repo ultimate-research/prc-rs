@@ -6,6 +6,8 @@ use quick_xml::{Reader, Writer};
 use std::io::{BufRead, Error as ioError, Read, Write};
 use std::str::{from_utf8, FromStr, Utf8Error};
 
+pub use quick_xml;
+
 /// Write a ParamStruct as XML
 pub fn write_xml<W: Write>(param: &ParamStruct, writer: &mut W) -> Result<(), quick_xml::Error> {
     let mut xml_writer = Writer::new_with_indent(writer, b' ', 2);

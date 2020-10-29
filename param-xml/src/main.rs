@@ -1,10 +1,10 @@
 mod args;
 
 use args::{Args, Mode};
+use prc::{open, save};
 use prc::hash40::{read_custom_labels, set_custom_labels};
 use prc::xml::{get_xml_error, read_xml, write_xml, ReadError};
-use prc::{open, save};
-use quick_xml::Error;
+use prc::xml::quick_xml::Error;
 use structopt::StructOpt;
 
 use std::fs::File;
