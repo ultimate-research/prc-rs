@@ -98,7 +98,7 @@ fn iter_hashes(list: &mut IndexSet<Hash40>, param: &ParamKind, count: &mut u32) 
 }
 
 fn iter_struct_hashes(list: &mut IndexSet<Hash40>, param_struct: &ParamStruct, count: &mut u32) {
-    for (hash, p) in param_struct {
+    for (hash, p) in &param_struct.0 {
         list.insert(*hash);
         iter_hashes(list, p, count);
     }
@@ -199,18 +199,18 @@ where
     let start_pos = param_cursor.seek(SeekFrom::Current(0))? as u32;
 
     param_cursor.write_u8(12)?;
-    param_cursor.write_u32::<LittleEndian>(param_struct.len() as u32)?;
+    param_cursor.write_u32::<LittleEndian>(param_struct.0.len() as u32)?;
     param_cursor.write_u32::<LittleEndian>(0)?; // placeholder number
 
     // do I keep the separate pass for hashes or combine two loops into this func?
-    let mut sorted = param_struct.iter().collect::<Vec<&_>>();
+    let mut sorted = param_struct.0.iter().collect::<Vec<&_>>();
     sorted.sort_by_key(|p| p.0);
 
     // we don't know what our data will look like yet
     // but we reserve the space to keep it ordered
     let ref_index = fd.ref_entries.len();
     fd.ref_entries.push(RefEntryWork {
-        ref_entry: RefEntry::RTable(Vec::with_capacity(param_struct.len())),
+        ref_entry: RefEntry::RTable(Vec::with_capacity(param_struct.0.len())),
         param_offset: start_pos + 5,
         is_duplicate: false,
         ref_offset: 0,

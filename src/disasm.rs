@@ -1,4 +1,4 @@
-use crate::param;
+use crate::param::*;
 use crate::RefTable;
 use byteorder::{LittleEndian, ReadBytesExt};
 use hash40::{Hash40, ReadHash40};
@@ -15,13 +15,13 @@ struct FileData {
     ref_tables: HashMap<u32, Rc<RefTable>>,
 }
 
-pub fn disassemble<C>(cursor: &mut C) -> Result<param::ParamStruct, Error>
+pub fn disassemble<C>(cursor: &mut C) -> Result<ParamStruct, Error>
 where
     C: Read + Seek,
 {
     let mut magic_bytes = [0; 8];
     cursor.read_exact(&mut magic_bytes)?;
-    if &magic_bytes != param::MAGIC {
+    if &magic_bytes != MAGIC {
         return Err(Error::new(ErrorKind::InvalidData, "Invalid file magic"));
     }
 
@@ -53,7 +53,7 @@ where
     cursor.seek(SeekFrom::Current(-1))?;
 
     // TODO: possible cleanup here
-    if let param::ParamKind::Struct(s) = read_param(cursor, &mut fd)? {
+    if let ParamKind::Struct(s) = read_param(cursor, &mut fd)? {
         Ok(s)
     } else {
         //the earlier block guarantees we get a struct
@@ -61,46 +61,46 @@ where
     }
 }
 
-fn read_param<C>(cursor: &mut C, fd: &mut FileData) -> Result<param::ParamKind, Error>
+fn read_param<C>(cursor: &mut C, fd: &mut FileData) -> Result<ParamKind, Error>
 where
     C: Read + Seek,
 {
     match cursor.read_u8()? {
         1 => {
             let val = cursor.read_u8()?;
-            Ok(param::ParamKind::Bool(val != 0))
+            Ok(ParamKind::Bool(val != 0))
         }
         2 => {
             let val = cursor.read_i8()?;
-            Ok(param::ParamKind::I8(val))
+            Ok(ParamKind::I8(val))
         }
         3 => {
             let val = cursor.read_u8()?;
-            Ok(param::ParamKind::U8(val))
+            Ok(ParamKind::U8(val))
         }
         4 => {
             let val = cursor.read_i16::<LittleEndian>()?;
-            Ok(param::ParamKind::I16(val))
+            Ok(ParamKind::I16(val))
         }
         5 => {
             let val = cursor.read_u16::<LittleEndian>()?;
-            Ok(param::ParamKind::U16(val))
+            Ok(ParamKind::U16(val))
         }
         6 => {
             let val = cursor.read_i32::<LittleEndian>()?;
-            Ok(param::ParamKind::I32(val))
+            Ok(ParamKind::I32(val))
         }
         7 => {
             let val = cursor.read_u32::<LittleEndian>()?;
-            Ok(param::ParamKind::U32(val))
+            Ok(ParamKind::U32(val))
         }
         8 => {
             let val = cursor.read_f32::<LittleEndian>()?;
-            Ok(param::ParamKind::Float(val))
+            Ok(ParamKind::Float(val))
         }
         9 => {
             let val = fd.hash_table[cursor.read_i32::<LittleEndian>()? as usize];
-            Ok(param::ParamKind::Hash(val))
+            Ok(ParamKind::Hash(val))
         }
         10 => {
             let strpos = cursor.read_u32::<LittleEndian>()?;
@@ -118,7 +118,7 @@ where
                 }
             }
             //cursor.set_position(curpos);
-            Ok(param::ParamKind::Str(val))
+            Ok(ParamKind::Str(val))
         }
         11 => {
             let pos = cursor.seek(SeekFrom::Current(0))? - 1;
@@ -134,7 +134,7 @@ where
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            Ok(param::ParamKind::List(params))
+            Ok(ParamKind::List(params))
         }
         12 => {
             let pos = cursor.seek(SeekFrom::Current(0))? - 1;
@@ -179,7 +179,7 @@ where
             //     })
             //     .collect::<Result<Vec<_>, Error>>()?;
 
-            Ok(param::ParamKind::Struct(params))
+            Ok(ParamKind::Struct(ParamStruct(params)))
         }
         _ => Err(Error::new(
             ErrorKind::InvalidData,
