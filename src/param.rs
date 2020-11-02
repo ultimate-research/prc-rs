@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 
 pub const MAGIC: &[u8; 8] = b"paracobn"; //paracobn
+const UNWRAP_ERR: &str = "Tried to unwrap param into inconsistent type";
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum ParamKind {
@@ -29,11 +30,29 @@ pub type ParamList = Vec<ParamKind>;
 pub struct ParamStruct(pub Vec<(Hash40, ParamKind)>);
 
 impl ParamKind {
-    pub fn unwrap_as_hashmap(&self) -> HashMap<Hash40, &ParamKind> {
+    pub fn unwrap_as_hashmap(self) -> HashMap<Hash40, ParamKind> {
+        TryInto::<ParamStruct>::try_into(self)
+            .unwrap()
+            .0
+            .drain(..)
+            .map(|(h, p)| (h, p))
+            .collect::<HashMap<_, _>>()
+    }
+
+    pub fn unwrap_as_hashmap_ref(&self) -> HashMap<Hash40, &ParamKind> {
         TryInto::<&ParamStruct>::try_into(self)
             .unwrap()
             .0
             .iter()
+            .map(|(h, p)| (*h, p))
+            .collect::<HashMap<_, _>>()
+    }
+
+    pub fn unwrap_as_hashmap_mut(&mut self) -> HashMap<Hash40, &mut ParamKind> {
+        TryInto::<&mut ParamStruct>::try_into(self)
+            .unwrap()
+            .0
+            .iter_mut()
             .map(|(h, p)| (*h, p))
             .collect::<HashMap<_, _>>()
     }
@@ -51,7 +70,7 @@ macro_rules! impl_from_param {
                     if let $param(val) = param {
                         Ok(val)
                     } else {
-                        Err("Tried to unwrap param into inconsistent type")
+                        Err(UNWRAP_ERR)
                     }
                 }
             }
@@ -63,7 +82,7 @@ macro_rules! impl_from_param {
                     if let $param(val) = param {
                         Ok(val)
                     } else {
-                        Err("Tried to unwrap param into inconsistent type")
+                        Err(UNWRAP_ERR)
                     }
                 }
             }
@@ -75,7 +94,7 @@ macro_rules! impl_from_param {
                     if let $param(val) = param {
                         Ok(val)
                     } else {
-                        Err("Tried to unwrap param into inconsistent type")
+                        Err(UNWRAP_ERR)
                     }
                 }
             }
