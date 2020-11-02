@@ -35,7 +35,6 @@ impl ParamKind {
             .unwrap()
             .0
             .drain(..)
-            .map(|(h, p)| (h, p))
             .collect::<HashMap<_, _>>()
     }
 
