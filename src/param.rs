@@ -23,13 +23,40 @@ pub enum ParamKind {
     Struct(ParamStruct),
 }
 
-pub type ParamList = Vec<ParamKind>;
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(transparent)]
+pub struct ParamList(pub Vec<ParamKind>);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(transparent)]
 pub struct ParamStruct(pub Vec<(Hash40, ParamKind)>);
 
 impl ParamKind {
+    pub fn try_into_owned<T>(self) -> Result<T, T::Error>
+    where
+        T: TryFrom<ParamKind>,
+    {
+        self.try_into()
+    }
+
+    pub fn try_into_ref<'a, T>(
+        &'a self,
+    ) -> Result<&'a T, <&'a T as std::convert::TryFrom<&'a ParamKind>>::Error>
+    where
+        &'a T: TryFrom<&'a ParamKind>,
+    {
+        self.try_into()
+    }
+
+    pub fn try_into_mut<'a, T>(
+        &'a mut self,
+    ) -> Result<&'a mut T, <&'a mut T as TryFrom<&'a mut ParamKind>>::Error>
+    where
+        &'a mut T: TryFrom<&'a mut ParamKind>,
+    {
+        self.try_into()
+    }
+
     pub fn unwrap_as_hashmap(self) -> HashMap<Hash40, ParamKind> {
         TryInto::<ParamStruct>::try_into(self)
             .unwrap()

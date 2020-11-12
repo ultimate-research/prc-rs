@@ -85,7 +85,7 @@ fn iter_hashes(list: &mut IndexSet<Hash40>, param: &ParamKind, count: &mut u32) 
             list.insert(*val);
         }
         ParamKind::List(val) => {
-            for p in val {
+            for p in &val.0 {
                 iter_hashes(list, p, count);
             }
         }
@@ -169,11 +169,11 @@ where
             let start_pos = param_cursor.seek(SeekFrom::Current(0))? as u32;
 
             param_cursor.write_u8(11)?;
-            param_cursor.write_u32::<LittleEndian>(val.len() as u32)?;
+            param_cursor.write_u32::<LittleEndian>(val.0.len() as u32)?;
 
             let mut table_pos = start_pos + 5;
-            let mut param_pos = table_pos + (4 * val.len() as u32);
-            for p in val {
+            let mut param_pos = table_pos + (4 * val.0.len() as u32);
+            for p in &val.0 {
                 param_cursor.seek(SeekFrom::Start(table_pos as u64))?;
                 param_cursor.write_u32::<LittleEndian>(param_pos - start_pos)?;
                 table_pos += 4;

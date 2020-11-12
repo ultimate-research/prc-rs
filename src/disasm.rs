@@ -134,7 +134,7 @@ where
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            Ok(ParamKind::List(params))
+            Ok(ParamKind::List(ParamList(params)))
         }
         12 => {
             let pos = cursor.seek(SeekFrom::Current(0))? - 1;
