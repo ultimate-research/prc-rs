@@ -66,11 +66,11 @@ fn list_to_node<W: Write>(
         start.push_attribute(a);
     }
 
-    if param.is_empty() {
+    if param.0.is_empty() {
         writer.write_event(Event::Empty(start))?;
     } else {
         writer.write_event(Event::Start(start))?;
-        for (index, child) in param.iter().enumerate() {
+        for (index, child) in param.0.iter().enumerate() {
             param_to_node(child, writer, Some(("index", &format!("{}", index))))?;
         }
         writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
@@ -89,11 +89,11 @@ fn struct_to_node<W: Write>(
         start.push_attribute(a);
     }
 
-    if param.is_empty() {
+    if param.0.is_empty() {
         writer.write_event(Event::Empty(start))?;
     } else {
         writer.write_event(Event::Start(start))?;
-        for (hash, child) in param.iter() {
+        for (hash, child) in param.0.iter() {
             param_to_node(child, writer, Some(("hash", &format!("{}", hash))))?;
         }
         writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
@@ -374,7 +374,7 @@ impl<'a> ParamStack<'a> {
                     // push a temporary param into the struct with the real hash
                     // because we don't have a way to store this for later, when
                     // the close tag is reached (unless I make something for it)
-                    s.push((hash, ParamKind::Bool(Default::default())));
+                    s.0.push((hash, ParamKind::Bool(Default::default())));
                 }
 
                 self.stack.push(p);
@@ -399,17 +399,17 @@ impl<'a> ParamStack<'a> {
                 // by the way expect is set, the parent is guaranteed to be either a struct or list
                 match self.stack.last_mut() {
                     Some(ParamKind::Struct(children)) => {
-                        children.last_mut().unwrap().1 = p;
+                        children.0.last_mut().unwrap().1 = p;
                         self.expect = Expect::OpenOrCloseTag(b"struct");
                     }
                     Some(ParamKind::List(children)) => {
-                        children.push(p);
+                        children.0.push(p);
                         self.expect = Expect::OpenOrCloseTag(b"list");
                     }
                     None => {
                         // first param on stack is guaranteed to be a struct
                         // so when we pop and there's nothing left, 'p' is that struct
-                        return Ok(Some(p.unwrap_owned()));
+                        return Ok(Some(p.try_into_owned().unwrap()));
                     }
                     _ => unreachable!(),
                 }
