@@ -23,11 +23,11 @@ pub enum ParamKind {
     Struct(ParamStruct),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(transparent)]
 pub struct ParamList(pub Vec<ParamKind>);
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(transparent)]
 pub struct ParamStruct(pub Vec<(Hash40, ParamKind)>);
 
