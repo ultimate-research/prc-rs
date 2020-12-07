@@ -1,0 +1,15 @@
+[package]
+name = "param-differ"
+version = "1.0.0"
+authors = ["BenHall-7 <benjaminjahall@gmail.com>"]
+description = "Application for diffing and patching Smash Ultimate param files"
+license = "MIT"
+license-file = "../LICENSE"
+repository = "https://github.com/ultimate-research/prc-rs"
+edition = "2018"
+
+[dependencies]
+prc-rs = { version = "1.3", path = ".." }
+diff-struct = "0.3"
+serde_yaml = "0.8"
+structopt = "0.3"
