@@ -16,10 +16,11 @@ xml = ["quick-xml"]
 
 [dependencies]
 byteorder = "1.3"
+diff-struct = "0.3"
 hash40 = "0.4.3"
 indexmap = "1.2"
 quick-xml = { version = "0.18.1", optional = true }
 serde = { version = "1", features = ["derive"] }
 
 [workspace]
-members = ["param-xml"]
+members = ["param-xml", "param-differ"]
