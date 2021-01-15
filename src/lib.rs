@@ -2,6 +2,7 @@ mod asm;
 mod disasm;
 pub mod param;
 #[cfg(feature = "xml")]
+/// Requires the `xml` feature to be enabled for access.
 pub mod xml;
 
 use std::fs::{read, write};

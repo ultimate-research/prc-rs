@@ -8,7 +8,8 @@ use std::str::{from_utf8, FromStr, Utf8Error};
 
 pub use quick_xml;
 
-/// Write a ParamStruct as XML
+/// Writes a ParamStruct as XML into the given writer.
+/// Returns nothing if successful, otherwise an [quick_xml::Error](Error).
 pub fn write_xml<W: Write>(param: &ParamStruct, writer: &mut W) -> Result<(), quick_xml::Error> {
     let mut xml_writer = Writer::new_with_indent(writer, b' ', 2);
     xml_writer.write_event(Event::Decl(BytesDecl::new(b"1.0", Some(b"utf-8"), None)))?;
@@ -101,7 +102,8 @@ fn struct_to_node<W: Write>(
     Ok(())
 }
 
-/// Read a ParamStruct from XML
+/// Read a ParamStruct from the given reader over XML data.
+/// Returns the param if successful, otherwise a [ReadErrorWrapper].
 pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadErrorWrapper> {
     let mut reader = Reader::from_reader(buf_reader);
     reader.expand_empty_elements(true);
@@ -112,11 +114,15 @@ pub fn read_xml<R: BufRead>(buf_reader: &mut R) -> Result<ParamStruct, ReadError
     read_xml_loop(&mut reader, &mut buf, &mut stack)
 }
 
-/// Take information of source file and error position, and print the lines of the error
+/// Takes a reader into the source file, the start and end position of any error, and returns an error string.
+/// The error string represents the file contents for all lines in the error range,
+/// as well as start and end pointers indicating the error's exact location.
+/// Returns an [Error](ioError) if the reader fails in the process.
+/// Panics if the start value is greater than the end value, or if the stream is too short for either.
 pub fn get_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<String, ioError> {
     if start > end {
         panic!(
-            "The provided start position = {} must be <= the provided end position = {}",
+            "The provided start position ({}) must be less than or equal to the provided end position ({})",
             start, end
         )
     }
@@ -165,7 +171,7 @@ pub fn get_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<Str
         }
     }
     if stage != Stage::Three {
-        panic!("The provided start or end values where longer than the provided stream")
+        panic!("The provided start or end values were longer than the provided stream")
     }
 
     let first = String::from_utf8_lossy(&line_so_far[0..start - line_start]);
@@ -192,6 +198,8 @@ pub fn get_xml_error<R: Read>(reader: R, start: usize, end: usize) -> Result<Str
     Ok(ret)
 }
 
+/// A wrapper over the error returned from reading XML.
+/// Provides start and end positions useful for [get_xml_error].
 #[derive(Debug)]
 pub struct ReadErrorWrapper {
     pub error: ReadError,
@@ -205,8 +213,8 @@ impl ReadErrorWrapper {
     }
 }
 
+/// Types of errors encountered while reading the XML param file
 #[derive(Debug)]
-/// Types of errors encountered the XML param file
 pub enum ReadError {
     /// `quick-xml` error, such as mismatched tags, non-utf8 text, broken syntax, etc
     QuickXml(quick_xml::Error),
@@ -233,6 +241,7 @@ pub enum ReadError {
 
 // Bad practice to just copy event names?
 // I need to have an "expected" event type as well so I can't just use Event<'a>
+/// A bare enum recording possible XML events, named to mirror [Event]
 #[derive(Debug, Clone, Copy)]
 pub enum QuickXmlEventType {
     CData,
