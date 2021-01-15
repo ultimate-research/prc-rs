@@ -9,7 +9,7 @@ use std::str::{from_utf8, FromStr, Utf8Error};
 pub use quick_xml;
 
 /// Writes a ParamStruct as XML into the given writer.
-/// Returns nothing if successful, otherwise an [quick_xml::Error](Error).
+/// Returns nothing if successful, otherwise an [Error](quick_xml::Error).
 pub fn write_xml<W: Write>(param: &ParamStruct, writer: &mut W) -> Result<(), quick_xml::Error> {
     let mut xml_writer = Writer::new_with_indent(writer, b' ', 2);
     xml_writer.write_event(Event::Decl(BytesDecl::new(b"1.0", Some(b"utf-8"), None)))?;
