@@ -143,6 +143,12 @@ macro_rules! impl_from_param {
                     }
                 }
             }
+
+            impl From<$t> for ParamKind {
+                fn from(v: $t) -> ParamKind {
+                    ParamKind::$param(v)
+                }
+            }
         )*
     }
 }
