@@ -24,3 +24,7 @@ The `xml` feature flag is available to expose methods allowing params to be conv
 A runtime utilizing the XML dependency to convert param files to XML and back. See the `Releases` section for Windows builds.
 
 Install with cargo via `cargo install param-xml`
+
+# extensions
+
+- [pyprc](https://github.com/BenHall-7/pyprc): a python module for writing and saving params dynamically.
