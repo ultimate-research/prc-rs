@@ -25,6 +25,6 @@ A runtime utilizing the XML dependency to convert param files to XML and back. S
 
 Install with cargo via `cargo install param-xml`
 
-# extensions
+# Extensions
 
 - [pyprc](https://github.com/BenHall-7/pyprc): a python module for writing and saving params dynamically.
