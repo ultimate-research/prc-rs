@@ -520,6 +520,7 @@ fn read_xml_loop<R: BufRead>(
                 }
             }
             Event::Decl(_) => {}
+            Event::Comment(_) => {}
             _ => {
                 return Err(ReadErrorWrapper::new(
                     ReadError::UnhandledEvent(QuickXmlEventType::from(&event)),
