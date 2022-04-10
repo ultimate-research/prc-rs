@@ -1,24 +1,24 @@
 mod args;
 
 use args::{Args, Mode};
-use prc::hash40::{read_custom_labels, set_custom_labels};
+use clap::Parser;
+use prc::hash40::Hash40;
 use prc::xml::quick_xml::Error;
 use prc::xml::{get_xml_error, read_xml, write_xml, ReadError};
 use prc::{open, save};
-use structopt::StructOpt;
 
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Seek, SeekFrom};
 use std::time::Instant;
 
 fn main() {
-    let args = Args::from_args();
+    let args = Args::parse();
 
     if let Some(label_file) = args.label {
-        match read_custom_labels(label_file) {
-            Ok(l) => set_custom_labels(l.into_iter()),
-            Err(e) => println!("Error loading labels: {}", e),
-        }
+        let label_clone = Hash40::label_map();
+        let mut labels = label_clone.lock().unwrap();
+        labels.add_custom_labels_from_path(label_file).unwrap();
+        labels.strict = args.strict;
     }
 
     match args.mode {

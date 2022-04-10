@@ -37,7 +37,7 @@ fn param_to_node<W: Write>(
             ))))?;
             writer.write_event(Event::End(BytesEnd::borrowed(name)))?;
         }};
-    };
+    }
     match param {
         ParamKind::Bool(val) => write_constant!(b"bool", val),
         ParamKind::I8(val) => write_constant!(b"sbyte", val),
@@ -342,7 +342,7 @@ impl<'a> ParamStack<'a> {
                     ($p:path) => {{
                         self.expect = Expect::Text;
                         $p(Default::default())
-                    };};
+                    }}
                 }
                 let p = match node_name {
                     b"bool" => default!(ParamKind::Bool),
@@ -447,7 +447,7 @@ impl<'a> ParamStack<'a> {
                     }
                     self.expect = Expect::CloseTag($tag_name);
                     Ok(())
-                };};
+                }}
             }
 
             match top {

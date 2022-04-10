@@ -1,7 +1,10 @@
 [package]
 name = "prc-rs"
 version = "1.3.2"
-authors = ["BenHall-7 <benjaminjahall@gmail.com>", "jam1garner <jam1.mcleod@hotmail.com>"]
+authors = [
+    "BenHall-7 <benjaminjahall@gmail.com>",
+    "jam1garner <jam1.mcleod@hotmail.com>",
+]
 description = "Library for working with PRC types in Smash Ultimate"
 license = "MIT"
 repository = "https://github.com/ultimate-research/prc-rs"
@@ -12,11 +15,11 @@ name = "prc"
 path = "src/lib.rs"
 
 [features]
-xml = ["quick-xml"]
+xml-feat = ["quick-xml"]
 
 [dependencies]
 byteorder = "1.3"
-hash40 = "0.4.3"
+hash40 = "1.1"
 indexmap = "1.2"
 quick-xml = { version = "0.18.1", optional = true }
 serde = { version = "1", features = ["derive"] }

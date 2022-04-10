@@ -1,22 +1,33 @@
-use structopt::StructOpt;
+use clap::Parser;
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 pub struct Args {
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     pub mode: Mode,
 
-    #[structopt(long, short, global(true))]
+    #[clap(long, short, global(true))]
     pub label: Option<String>,
 
-    #[structopt(long, short, global(true))]
+    #[clap(
+        long,
+        short,
+        global(true),
+        requires("label"),
+        help = "Whether to fail if a label does not have a corresponding hash. \
+                Useful to catch spelling errors. By default, the program uses the \
+                default hash40 algorithm to generate hashes for unmatched labels"
+    )]
+    pub strict: bool,
+
+    #[clap(long, short, global(true), help = "The file to output the result to")]
     pub out: Option<String>,
 }
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 pub enum Mode {
-    #[structopt(about = "Convert from prc to xml")]
+    #[clap(about = "Convert from prc to xml")]
     Disasm { file: String },
 
-    #[structopt(about = "Convert from xml to prc")]
+    #[clap(about = "Convert from xml to prc")]
     Asm { file: String },
 }
