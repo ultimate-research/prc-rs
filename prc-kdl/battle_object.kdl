@@ -1,0 +1,50 @@
+// Inside a struct, we can just use name-value pairs with type annotations
+stick_clamp_max (float)120
+stick_neutral (float)0.2
+clatter_double_invalid_frame (int)3
+// Unlabeled hashes shouldn't be an issue, I don't think.
+// Also does this require quotes?
+"0x21af4b1219" (int)2
+
+// If a list only contains values, we can one-line it
+turn_param_damage_turn_angle 34.6 76.4 113.4 137.3 152.8 (float)164 173.7 (float)180
+
+// If a struct contains only values, it makes sense to treat them as attributes
+spirits_critical_attack_color r=1.2 g=0.24 b=0.413
+
+// If a list contains structs or lists, we'll have to use children
+turn_param {
+  // Is it a good idea to move values from inside the struct to attributes?
+  struct id=(hash)"damage_air" {
+    param 34.6 76.4 113.4 137.3 152.8 (float)164 173.7 (float)180
+  }
+  struct id=(hash)"item_lift" {
+    param 34.6 76.4 113.4 137.3 152.8 (float)164 173.7 (float)180
+  }
+  // ...
+  struct id=(hash)"attack_s4_flip" {
+    // TODO: how do we communicate lists with length 0 or 1?
+    // Maybe the straightforward syntax is the best option:
+    list name="param" (float)180
+  }
+}
+
+// If a struct contains structs or lists, use children again
+spycloak_animation {
+  // This is a list, and the way we know is the children are not named.
+  // But that might cause issues more generally if names collide.
+  data_ {
+    struct frame=(float)0 value=(float)0 coefficient=(float)0
+    struct frame=(float)48 value=(float)0 coefficient=(float)0
+    struct frame=(float)52 value=-0.105525 coefficient=-0.063836
+    // ...
+  }
+}
+
+// We could improve list type-annotations by specifying the type for all elements
+turn_param_damage_turn_angle t="float" 34.6 76.4 113.4 137.3 152.8 164 173.7 180
+
+// Although it's 100% possible for different types of elements to be within lists,
+// no such case exists within the game.
+// We can raise errors on stuff like this:
+arbitrary_name t="float" 0 10 42 "not a number" 100 (int)101
