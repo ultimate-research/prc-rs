@@ -16,6 +16,7 @@ path = "src/lib.rs"
 
 [features]
 xml-feat = ["quick-xml"]
+indexmap-std = ["indexmap/std"]
 
 [dependencies]
 byteorder = "1.3"
