@@ -3,6 +3,8 @@ mod disasm;
 pub mod param;
 #[cfg(feature = "xml-feat")]
 pub mod xml;
+#[cfg(feature = "kdl-feat")]
+pub mod kdl;
 
 use std::fs::{read, write};
 use std::io::{Cursor, Error, Read, Seek, Write};

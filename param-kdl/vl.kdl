@@ -1,0 +1,62 @@
+
+(list)map_coll_data {
+  struct node=(hash)"head" offset_x=1.5 offset_y=0.0 offset_z=0.0
+  struct node=(hash)"shoulderr" offset_x=0.0 offset_y=0.0 offset_z=0.0
+  struct node=(hash)"shoulderl" offset_x=0.0 offset_y=0.0 offset_z=0.0
+  struct node=(hash)"footr" offset_x=0.0 offset_y=0.0 offset_z=0.0
+  struct node=(hash)"footl" offset_x=0.0 offset_y=0.0 offset_z=0.0
+  struct node=(hash)"hip" offset_x=0.0 offset_y=0.0 offset_z=0.0
+}
+
+(list)hit_data {
+  struct \
+    offset1_x=1.0 \
+    offset1_y=0.2 \
+    offset1_z=0.0 \
+    offset2_x=-0.3 \
+    offset2_y=-0.3 \
+    offset2_z=0.0 \
+    size=3.2 \
+    node_id=(hash)"hip" \
+    part=(hash)"collision_part_body" \
+    height=(hash)"hit_height_center" \
+    status=(hash)"hit_status_normal" \
+    check_type=(hash)"collision_shape_type_capsule"
+  struct \
+    offset1_x=0.8 \
+    offset1_y=0.7 \
+    offset1_z=0.0 \
+    offset2_x=1.0 \
+    offset2_y=0.0 \
+    offset2_z=0.0 \
+    size=3.1 \
+    node_id=(hash)"head" \
+    part=(hash)"collision_part_head" \
+    height=(hash)"hit_height_high" \
+    status=(hash)"hit_status_normal" \
+    check_type=(hash)"collision_shape_type_capsule"
+}
+
+(list)hit_target 1 0 6
+
+(list)cliff_hang_data {
+  struct p1_x=16.0 p1_y=21.0 p2_x=-11.0 p2_y=5.0
+}
+
+(list)squat_walk_data {
+  struct speed_forward=0.7 speed_back=0.5
+}
+
+// ... more of the same ...
+
+map_collision_dengekidama \
+  shape_type=(hash)"grcorrect_shape_rhombus" \
+  up=2.0 \
+  down=-2.0 \
+  half_width=2.0
+
+map_collision_dengeki \
+  shape_type=(hash)"grcorrect_shape_rhombus" \
+  up=0.1 \
+  down=-0.1 \
+  half_width=0.1

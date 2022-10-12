@@ -1,19 +1,19 @@
 // Inside a struct, we can just use name-value pairs with type annotations
-stick_clamp_max (float)120
-stick_neutral (float)0.2
-clatter_double_invalid_frame (int)3
+stick_clamp_max 120.0
+stick_neutral 0.2
+clatter_double_invalid_frame 3
 // Unlabeled hashes shouldn't be an issue, I don't think.
 // Also does this require quotes?
-"0x21af4b1219" (int)2
+"0x21af4b1219" 2
 
 // If a list only contains values, we can one-line it
-turn_param_damage_turn_angle 34.6 76.4 113.4 137.3 152.8 (float)164 173.7 (float)180
+turn_param_damage_turn_angle 34.6 76.4 113.4 137.3 152.8 164.0 173.7 180.0
 
 // If a struct contains only values, it makes sense to treat them as attributes
 spirits_critical_attack_color r=1.2 g=0.24 b=0.413
 
 // If a list contains structs or lists, we'll have to use children
-turn_param {
+turn_param type="list" {
   // Is it a good idea to move values from inside the struct to attributes?
   struct id=(hash)"damage_air" {
     param 34.6 76.4 113.4 137.3 152.8 (float)164 173.7 (float)180
@@ -29,10 +29,7 @@ turn_param {
   }
 }
 
-// If a struct contains structs or lists, use children again
 spycloak_animation {
-  // This is a list, and the way we know is the children are not named.
-  // But that might cause issues more generally if names collide.
   data_ {
     struct frame=(float)0 value=(float)0 coefficient=(float)0
     struct frame=(float)48 value=(float)0 coefficient=(float)0
