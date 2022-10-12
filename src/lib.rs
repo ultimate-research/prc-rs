@@ -1,8 +1,12 @@
 mod asm;
 mod disasm;
 pub mod param;
+pub mod from_stream;
 #[cfg(feature = "xml-feat")]
 pub mod xml;
+
+#[cfg(test)]
+mod tests;
 
 use std::fs::{read, write};
 use std::io::{Cursor, Error, Read, Seek, Write};
