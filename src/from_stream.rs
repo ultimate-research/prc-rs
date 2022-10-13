@@ -179,7 +179,7 @@ impl<T: FromStream> FromStream for Vec<T> {
         check_type(reader, 11)?;
         let len = reader.read_u32::<LittleEndian>()?;
 
-        let mut list = vec![];
+        let mut list = Vec::with_capacity(len as usize);
 
         for i in 0..len {
             reader.seek(SeekFrom::Start(start + 5 + (i as u64 * 4)))?;
