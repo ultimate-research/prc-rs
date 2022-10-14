@@ -3,8 +3,23 @@ use std::io::{ErrorKind, Read, Result, Seek, SeekFrom};
 use byteorder::{LittleEndian, ReadBytesExt};
 use hash40::{Hash40, ReadHash40};
 
+/// A trait allowing a type to be converted from the param container format
+pub trait Prc: Sized {
+    /// Creates Self by reading the from the data. The reader should be
+    /// positioned at the start of the param marker before calling this
+    fn read_param<R: Read + Seek>(reader: &mut R, offsets: FileOffsets) -> Result<Self>;
+
+    /// A blanket implementation which reads the entire file to create
+    /// Self. The reader should be at the beginning of the file before
+    /// calling this.
+    fn read_file<R: Read + Seek>(reader: &mut R) -> Result<Self> {
+        let offsets = prepare(reader)?;
+        Self::read_param(reader, offsets)
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
-pub struct Offsets {
+pub struct FileOffsets {
     pub hashes: u64,
     pub ref_table: u64,
 }
@@ -40,11 +55,11 @@ impl StructData {
     }
 
     // moves the reader to the child param with the provided hash
-    pub fn search_child<R: Read + Seek>(
+    fn search_child<R: Read + Seek>(
         &self,
         reader: &mut R,
         hash: Hash40,
-        offsets: Offsets,
+        offsets: FileOffsets,
     ) -> Result<()> {
         // TODO: use a binary search instead of a linear one
         for i in 0..self.len {
@@ -63,16 +78,20 @@ impl StructData {
         }
         Err(ErrorKind::NotFound.into())
     }
-}
 
-pub trait FromStream: Sized {
-    /// Creates Self by reading the from the data. The reader should be
-    /// positioned at the start of the param marker before calling this
-    fn read_param<R: Read + Seek>(reader: &mut R, offsets: Offsets) -> Result<Self>;
+    pub fn read_child<R: Read + Seek, T: Prc>(
+        &self,
+        reader: &mut R,
+        hash: Hash40,
+        offsets: FileOffsets,
+    ) -> Result<T> {
+        self.search_child(reader, hash, offsets)
+            .and_then(|_| T::read_param(reader, offsets))
+    }
 }
 
 /// Reads the header data and moves the reader to the start of the params
-pub fn prepare<R: Read + Seek>(reader: &mut R) -> Result<Offsets> {
+pub fn prepare<R: Read + Seek>(reader: &mut R) -> Result<FileOffsets> {
     reader.seek(SeekFrom::Current(8))?;
     let hashes_size = reader.read_u32::<LittleEndian>()?;
     let ref_table_size = reader.read_u32::<LittleEndian>()?;
@@ -83,16 +102,13 @@ pub fn prepare<R: Read + Seek>(reader: &mut R) -> Result<Offsets> {
     let ref_table = reader.seek(SeekFrom::Current(0))?;
 
     reader.seek(SeekFrom::Current(ref_table_size as i64))?;
-    Ok(Offsets {
-        hashes,
-        ref_table,
-    })
+    Ok(FileOffsets { hashes, ref_table })
 }
 
 // basic implementations for all types except struct here
 
-impl FromStream for bool {
-    fn read_param<R: Read + Seek>(reader: &mut R, _offsets: Offsets) -> Result<Self> {
+impl Prc for bool {
+    fn read_param<R: Read + Seek>(reader: &mut R, _offsets: FileOffsets) -> Result<Self> {
         reader
             .read_u8()?
             .eq(&1)
@@ -105,8 +121,8 @@ impl FromStream for bool {
 macro_rules! impl_read_byte {
     ($(($param_type:ty, $num:literal, $read_func:ident)),*) => {
         $(
-            impl FromStream for $param_type {
-                fn read_param<R: Read + Seek>(reader: &mut R, _offsets: Offsets) -> Result<Self> {
+            impl Prc for $param_type {
+                fn read_param<R: Read + Seek>(reader: &mut R, _offsets: FileOffsets) -> Result<Self> {
                     check_type(reader, $num)?;
                     ReadBytesExt::$read_func(reader)
                 }
@@ -118,8 +134,8 @@ macro_rules! impl_read_byte {
 macro_rules! impl_read_value {
     ($(($param_type:ty, $num:literal, $read_func:ident)),*) => {
         $(
-            impl FromStream for $param_type {
-                fn read_param<R: Read + Seek>(reader: &mut R, _offsets: Offsets) -> Result<Self> {
+            impl Prc for $param_type {
+                fn read_param<R: Read + Seek>(reader: &mut R, _offsets: FileOffsets) -> Result<Self> {
                     check_type(reader, $num)?;
                     ReadBytesExt::$read_func::<LittleEndian>(reader)
                 }
@@ -138,8 +154,8 @@ impl_read_value!(
     (f32, 8, read_f32)
 );
 
-impl FromStream for Hash40 {
-    fn read_param<R: Read + Seek>(reader: &mut R, offsets: Offsets) -> Result<Self> {
+impl Prc for Hash40 {
+    fn read_param<R: Read + Seek>(reader: &mut R, offsets: FileOffsets) -> Result<Self> {
         check_type(reader, 9)?;
         let hash_index = reader.read_u32::<LittleEndian>()?;
         let end_position = reader.seek(SeekFrom::Current(0))?;
@@ -152,8 +168,8 @@ impl FromStream for Hash40 {
     }
 }
 
-impl FromStream for String {
-    fn read_param<R: Read + Seek>(reader: &mut R, offsets: Offsets) -> Result<Self> {
+impl Prc for String {
+    fn read_param<R: Read + Seek>(reader: &mut R, offsets: FileOffsets) -> Result<Self> {
         let str_offset = reader.read_u32::<LittleEndian>()?;
         let end_position = reader.seek(SeekFrom::Current(0))?;
 
@@ -173,8 +189,8 @@ impl FromStream for String {
     }
 }
 
-impl<T: FromStream> FromStream for Vec<T> {
-    fn read_param<R: Read + Seek>(reader: &mut R, offsets: Offsets) -> Result<Self> {
+impl<T: Prc> Prc for Vec<T> {
+    fn read_param<R: Read + Seek>(reader: &mut R, offsets: FileOffsets) -> Result<Self> {
         let start = reader.seek(SeekFrom::Current(0))?;
         check_type(reader, 11)?;
         let len = reader.read_u32::<LittleEndian>()?;
