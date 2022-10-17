@@ -1,6 +1,6 @@
 use crate::Prc;
 
-use std::io::{Cursor, Result};
+use std::io::Cursor;
 
 use hash40::{hash40, Hash40};
 

@@ -1,4 +1,5 @@
-use std::io::{ErrorKind, Read, Result, Seek, SeekFrom};
+use std::convert::TryFrom;
+use std::io::{Read, Seek, SeekFrom};
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use hash40::{Hash40, ReadHash40};
@@ -18,12 +19,36 @@ pub trait Prc: Sized {
     }
 }
 
+// make custom reader struct to return errors in the correct type?
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// The error type returned from [Prc] trait operations, including
+/// the Hash40 path and reader position
+#[derive(Debug)]
+pub struct Error {
+    pub path: Vec<Hash40>,
+    pub position: std::io::Result<u64>,
+    pub kind: ErrorKind,
+}
+
+/// The original error thrown
+#[derive(Debug)]
+pub enum ErrorKind {
+    WrongParamNumber { expected: ParamNumber, received: u8 },
+    ParamNotFound(Hash40),
+    Io(std::io::Error),
+}
+
+/// Offsets to tables derived from the file header, necessary when reading
+/// certain params
 #[derive(Debug, Copy, Clone)]
 pub struct FileOffsets {
     pub hashes: u64,
     pub ref_table: u64,
 }
 
+/// Information read from a struct to facilitate reading child params
 #[derive(Debug, Copy, Clone)]
 pub struct StructData {
     pub position: u64,
@@ -31,21 +56,59 @@ pub struct StructData {
     pub ref_offset: u32,
 }
 
-fn check_type<R: Read + Seek>(reader: &mut R, value: u8) -> Result<()> {
-    reader
-        .read_u8()?
-        .eq(&value)
-        .then_some(())
-        .ok_or_else(|| ErrorKind::InvalidData.into())
+/// The number associated with each type of param in a file
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ParamNumber {
+    Bool = 1,
+    I8,
+    U8,
+    I16,
+    U16,
+    I32,
+    U32,
+    Float,
+    Hash,
+    String,
+    List,
+    Struct,
+}
+
+pub fn check_type<R: Read + Seek>(reader: &mut R, value: ParamNumber) -> Result<()> {
+    let pre_pos = reader.stream_position();
+    let read = reader.read_u8().map_err(|e| Error::new(e, reader))?;
+
+    if read != value.into() {
+        Err(Error::new_with_pos(
+            ErrorKind::WrongParamNumber {
+                expected: value,
+                received: read,
+            },
+            pre_pos,
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 impl StructData {
     pub fn from_stream<R: Read + Seek>(reader: &mut R) -> Result<Self> {
-        let position = reader.seek(SeekFrom::Current(0))?;
-        check_type(reader, 12)?;
-        let len = reader.read_u32::<LittleEndian>()?;
-        let ref_offset = reader.read_u32::<LittleEndian>()?;
-        reader.seek(SeekFrom::Start(position))?;
+        let position = reader
+            .seek(SeekFrom::Current(0))
+            .map_err(|e| Error::new(e, reader))?;
+
+        check_type(reader, ParamNumber::Struct)?;
+
+        let len = reader
+            .read_u32::<LittleEndian>()
+            .map_err(|e| Error::new(e, reader))?;
+        let ref_offset = reader
+            .read_u32::<LittleEndian>()
+            .map_err(|e| Error::new(e, reader))?;
+
+        reader
+            .seek(SeekFrom::Start(position))
+            .map_err(|e| Error::new(e, reader))?;
 
         Ok(Self {
             position,
@@ -54,7 +117,7 @@ impl StructData {
         })
     }
 
-    // moves the reader to the child param with the provided hash
+    /// Moves the reader to the child param with the provided hash
     fn search_child<R: Read + Seek>(
         &self,
         reader: &mut R,
@@ -63,22 +126,41 @@ impl StructData {
     ) -> Result<()> {
         // TODO: use a binary search instead of a linear one
         for i in 0..self.len {
-            reader.seek(SeekFrom::Start(
-                offsets.ref_table + self.ref_offset as u64 + (i as u64 * 8),
-            ))?;
+            reader
+                .seek(SeekFrom::Start(
+                    offsets.ref_table + self.ref_offset as u64 + (i as u64 * 8),
+                ))
+                .map_err(|e| Error::new(e, reader))?;
 
-            let hash_index = reader.read_u32::<LittleEndian>()?;
-            let param_offset = reader.read_u32::<LittleEndian>()?;
+            let hash_index = reader
+                .read_u32::<LittleEndian>()
+                .map_err(|e| Error::new(e, reader))?;
+            let param_offset = reader
+                .read_u32::<LittleEndian>()
+                .map_err(|e| Error::new(e, reader))?;
 
-            reader.seek(SeekFrom::Start(offsets.hashes + (hash_index as u64 * 8)))?;
-            if hash == reader.read_hash40::<LittleEndian>()? {
-                reader.seek(SeekFrom::Start(self.position + (param_offset as u64)))?;
+            reader
+                .seek(SeekFrom::Start(offsets.hashes + (hash_index as u64 * 8)))
+                .map_err(|e| Error::new(e, reader))?;
+            let read_hash = reader
+                .read_hash40::<LittleEndian>()
+                .map_err(|e| Error::new(e, reader))?;
+
+            if hash == read_hash {
+                reader
+                    .seek(SeekFrom::Start(self.position + (param_offset as u64)))
+                    .map_err(|e| Error::new(e, reader))?;
                 return Ok(());
             }
         }
-        Err(ErrorKind::NotFound.into())
+        Err(Error::new_with_pos(
+            ErrorKind::ParamNotFound(hash),
+            Ok(self.position),
+        ))
     }
 
+    /// Moves the reader to the child param with the provided hash and reads
+    /// the param fulfilling the [Prc] trait.
     pub fn read_child<R: Read + Seek, T: Prc>(
         &self,
         reader: &mut R,
@@ -87,11 +169,23 @@ impl StructData {
     ) -> Result<T> {
         self.search_child(reader, hash, offsets)
             .and_then(|_| T::read_param(reader, offsets))
+            .map_err(|mut e| {
+                e.path.insert(0, hash);
+                Error {
+                    path: e.path,
+                    position: e.position,
+                    kind: e.kind,
+                }
+            })
     }
 }
 
 /// Reads the header data and moves the reader to the start of the params
 pub fn prepare<R: Read + Seek>(reader: &mut R) -> Result<FileOffsets> {
+    prepare_internal(reader).map_err(|e| Error::new(e, reader))
+}
+
+fn prepare_internal<R: Read + Seek>(reader: &mut R) -> std::io::Result<FileOffsets> {
     reader.seek(SeekFrom::Current(8))?;
     let hashes_size = reader.read_u32::<LittleEndian>()?;
     let ref_table_size = reader.read_u32::<LittleEndian>()?;
@@ -109,22 +203,21 @@ pub fn prepare<R: Read + Seek>(reader: &mut R) -> Result<FileOffsets> {
 
 impl Prc for bool {
     fn read_param<R: Read + Seek>(reader: &mut R, _offsets: FileOffsets) -> Result<Self> {
+        check_type(reader, ParamNumber::Bool)?;
         reader
-            .read_u8()?
-            .eq(&1)
-            .then_some(())
-            .ok_or(ErrorKind::InvalidData)?;
-        reader.read_u8().map(|byte| byte > 0)
+            .read_u8()
+            .map_err(|e| Error::new(e, reader))
+            .map(|byte| byte > 0)
     }
 }
 
 macro_rules! impl_read_byte {
-    ($(($param_type:ty, $num:literal, $read_func:ident)),*) => {
+    ($(($param_type:ty, $num:path, $read_func:ident)),*) => {
         $(
             impl Prc for $param_type {
                 fn read_param<R: Read + Seek>(reader: &mut R, _offsets: FileOffsets) -> Result<Self> {
                     check_type(reader, $num)?;
-                    ReadBytesExt::$read_func(reader)
+                    ReadBytesExt::$read_func(reader).map_err(|e| Error::new(e, reader))
                 }
             }
         )*
@@ -132,78 +225,162 @@ macro_rules! impl_read_byte {
 }
 
 macro_rules! impl_read_value {
-    ($(($param_type:ty, $num:literal, $read_func:ident)),*) => {
+    ($(($param_type:ty, $num:path, $read_func:ident)),*) => {
         $(
             impl Prc for $param_type {
                 fn read_param<R: Read + Seek>(reader: &mut R, _offsets: FileOffsets) -> Result<Self> {
                     check_type(reader, $num)?;
-                    ReadBytesExt::$read_func::<LittleEndian>(reader)
+                    ReadBytesExt::$read_func::<LittleEndian>(reader).map_err(|e| Error::new(e, reader))
                 }
             }
         )*
     };
 }
 
-impl_read_byte!((i8, 2, read_i8), (u8, 3, read_u8));
+impl_read_byte!(
+    (i8, ParamNumber::I8, read_i8),
+    (u8, ParamNumber::U8, read_u8)
+);
 
 impl_read_value!(
-    (i16, 4, read_i16),
-    (u16, 5, read_u16),
-    (i32, 6, read_i32),
-    (u32, 7, read_u32),
-    (f32, 8, read_f32)
+    (i16, ParamNumber::I16, read_i16),
+    (u16, ParamNumber::U16, read_u16),
+    (i32, ParamNumber::I32, read_i32),
+    (u32, ParamNumber::U32, read_u32),
+    (f32, ParamNumber::Float, read_f32)
 );
 
 impl Prc for Hash40 {
     fn read_param<R: Read + Seek>(reader: &mut R, offsets: FileOffsets) -> Result<Self> {
-        check_type(reader, 9)?;
-        let hash_index = reader.read_u32::<LittleEndian>()?;
-        let end_position = reader.seek(SeekFrom::Current(0))?;
+        check_type(reader, ParamNumber::Hash)?;
+        let hash_index = reader
+            .read_u32::<LittleEndian>()
+            .map_err(|e| Error::new(e, reader))?;
+        let end_position = reader
+            .seek(SeekFrom::Current(0))
+            .map_err(|e| Error::new(e, reader))?;
 
-        reader.seek(SeekFrom::Start(offsets.hashes + (hash_index as u64 * 8)))?;
-        let hash = reader.read_hash40::<LittleEndian>()?;
+        reader
+            .seek(SeekFrom::Start(offsets.hashes + (hash_index as u64 * 8)))
+            .map_err(|e| Error::new(e, reader))?;
+        let hash = reader
+            .read_hash40::<LittleEndian>()
+            .map_err(|e| Error::new(e, reader))?;
 
-        reader.seek(SeekFrom::Start(end_position))?;
+        reader
+            .seek(SeekFrom::Start(end_position))
+            .map_err(|e| Error::new(e, reader))?;
         Ok(hash)
     }
 }
 
 impl Prc for String {
     fn read_param<R: Read + Seek>(reader: &mut R, offsets: FileOffsets) -> Result<Self> {
-        let str_offset = reader.read_u32::<LittleEndian>()?;
-        let end_position = reader.seek(SeekFrom::Current(0))?;
+        check_type(reader, ParamNumber::String)?;
+        let str_offset = reader
+            .read_u32::<LittleEndian>()
+            .map_err(|e| Error::new(e, reader))?;
+        let end_position = reader
+            .seek(SeekFrom::Current(0))
+            .map_err(|e| Error::new(e, reader))?;
 
-        reader.seek(SeekFrom::Start(offsets.ref_table + str_offset as u64))?;
+        reader
+            .seek(SeekFrom::Start(offsets.ref_table + str_offset as u64))
+            .map_err(|e| Error::new(e, reader))?;
         let mut string = String::new();
 
         loop {
-            let byte = reader.read_u8()?;
+            let byte = reader.read_u8().map_err(|e| Error::new(e, reader))?;
             if byte == 0 {
                 break;
             }
             string.push(byte as char);
         }
 
-        reader.seek(SeekFrom::Start(end_position))?;
+        reader
+            .seek(SeekFrom::Start(end_position))
+            .map_err(|e| Error::new(e, reader))?;
         Ok(string)
     }
 }
 
 impl<T: Prc> Prc for Vec<T> {
     fn read_param<R: Read + Seek>(reader: &mut R, offsets: FileOffsets) -> Result<Self> {
-        let start = reader.seek(SeekFrom::Current(0))?;
-        check_type(reader, 11)?;
-        let len = reader.read_u32::<LittleEndian>()?;
+        let start = reader
+            .seek(SeekFrom::Current(0))
+            .map_err(|e| Error::new(e, reader))?;
+        check_type(reader, ParamNumber::List)?;
+        let len = reader
+            .read_u32::<LittleEndian>()
+            .map_err(|e| Error::new(e, reader))?;
 
         let mut list = Vec::with_capacity(len as usize);
 
         for i in 0..len {
-            reader.seek(SeekFrom::Start(start + 5 + (i as u64 * 4)))?;
-            let offset = reader.read_u32::<LittleEndian>()?;
-            reader.seek(SeekFrom::Start(start + offset as u64))?;
+            reader
+                .seek(SeekFrom::Start(start + 5 + (i as u64 * 4)))
+                .map_err(|e| Error::new(e, reader))?;
+            let offset = reader
+                .read_u32::<LittleEndian>()
+                .map_err(|e| Error::new(e, reader))?;
+            reader
+                .seek(SeekFrom::Start(start + offset as u64))
+                .map_err(|e| Error::new(e, reader))?;
             list.push(T::read_param(reader, offsets)?);
         }
 
         Ok(list)
+    }
+}
+
+impl TryFrom<u8> for ParamNumber {
+    type Error = u8;
+
+    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
+        match value {
+            1 => Ok(ParamNumber::Bool),
+            2 => Ok(ParamNumber::I8),
+            3 => Ok(ParamNumber::U8),
+            4 => Ok(ParamNumber::I16),
+            5 => Ok(ParamNumber::U16),
+            6 => Ok(ParamNumber::I32),
+            7 => Ok(ParamNumber::U32),
+            8 => Ok(ParamNumber::Float),
+            9 => Ok(ParamNumber::Hash),
+            10 => Ok(ParamNumber::String),
+            11 => Ok(ParamNumber::List),
+            12 => Ok(ParamNumber::Struct),
+            _ => Err(value),
+        }
+    }
+}
+
+impl From<ParamNumber> for u8 {
+    fn from(param_num: ParamNumber) -> Self {
+        param_num as u8
+    }
+}
+
+impl Error {
+    fn new<E: Into<ErrorKind>, S: Seek>(kind: E, seek: &mut S) -> Self {
+        Error {
+            path: vec![],
+            position: seek.stream_position(),
+            kind: kind.into(),
+        }
+    }
+
+    fn new_with_pos<E: Into<ErrorKind>>(kind: E, pos: std::io::Result<u64>) -> Self {
+        Error {
+            path: vec![],
+            position: pos,
+            kind: kind.into(),
+        }
+    }
+}
+
+impl From<std::io::Error> for ErrorKind {
+    fn from(e: std::io::Error) -> Self {
+        ErrorKind::Io(e)
     }
 }
