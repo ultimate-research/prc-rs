@@ -1,6 +1,6 @@
 [package]
 name = "prc-rs"
-version = "1.5.0"
+version = "1.5.1"
 authors = [
     "BenHall-7 <benjaminjahall@gmail.com>",
     "jam1garner <jam1.mcleod@hotmail.com>",
