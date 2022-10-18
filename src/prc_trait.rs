@@ -27,7 +27,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// the Hash40 path and reader position
 #[derive(Debug)]
 pub struct Error {
-    pub path: Vec<Hash40>,
+    pub path: Vec<ErrorPathPart>,
     pub position: std::io::Result<u64>,
     pub kind: ErrorKind,
 }
@@ -38,6 +38,14 @@ pub enum ErrorKind {
     WrongParamNumber { expected: ParamNumber, received: u8 },
     ParamNotFound(Hash40),
     Io(std::io::Error),
+}
+
+/// Used for the path of an error. Could be a hash (for structs) or
+/// an index (for a list)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ErrorPathPart {
+    Index(u32),
+    Hash(Hash40),
 }
 
 /// Offsets to tables derived from the file header, necessary when reading
@@ -167,16 +175,18 @@ impl StructData {
         hash: Hash40,
         offsets: FileOffsets,
     ) -> Result<T> {
-        self.search_child(reader, hash, offsets)
-            .and_then(|_| T::read_param(reader, offsets))
-            .map_err(|mut e| {
-                e.path.insert(0, hash);
-                Error {
-                    path: e.path,
-                    position: e.position,
-                    kind: e.kind,
-                }
-            })
+        // If the child param isn't found, we don't push that hash into the error path
+        self.search_child(reader, hash, offsets)?;
+
+        // Errors caused while doing anything else will add the hash to the path
+        T::read_param(reader, offsets).map_err(|mut e| {
+            e.path.insert(0, ErrorPathPart::Hash(hash));
+            Error {
+                path: e.path,
+                position: e.position,
+                kind: e.kind,
+            }
+        })
     }
 }
 
@@ -326,7 +336,17 @@ impl<T: Prc> Prc for Vec<T> {
             reader
                 .seek(SeekFrom::Start(start + offset as u64))
                 .map_err(|e| Error::new(e, reader))?;
-            list.push(T::read_param(reader, offsets)?);
+
+            // read the type, and potentially add index to the error path
+            let child = T::read_param(reader, offsets).map_err(|mut e| {
+                e.path.insert(0, ErrorPathPart::Index(i));
+                Error {
+                    path: e.path,
+                    position: e.position,
+                    kind: e.kind,
+                }
+            })?;
+            list.push(child);
         }
 
         Ok(list)

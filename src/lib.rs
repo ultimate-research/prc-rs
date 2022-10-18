@@ -1,7 +1,7 @@
 mod asm;
 mod disasm;
 mod param;
-mod traits;
+pub mod prc_trait;
 #[cfg(feature = "xml-feat")]
 pub mod xml;
 
@@ -15,7 +15,7 @@ use std::path::Path;
 pub use hash40;
 pub use param::*;
 pub use prc_rs_derive::Prc;
-pub use traits::*;
+pub use prc_trait::Prc;
 
 pub(crate) type RefTable = Vec<(u32, u32)>;
 

@@ -1,3 +1,4 @@
+use crate::prc_trait::{ErrorKind, ErrorPathPart, ParamNumber};
 use crate::Prc;
 
 use std::io::Cursor;
@@ -90,4 +91,78 @@ fn test_param_read_from_struct_def() {
             }]
         }
     );
+}
+
+#[derive(Debug, Default, PartialEq, Prc)]
+#[prc(path = crate)]
+struct FighterPikachuVlTestError1 {
+    hit_target: Vec<i16>,
+}
+
+#[test]
+fn test_derive_wrong_param_type_error() {
+    let mut reader = Cursor::new(FIGHTER_PIKACHU_VL);
+    let vl = FighterPikachuVlTestError1::read_file(&mut reader).unwrap_err();
+    // I would use assert_eq! on the vl.kind, but std::io::Error doesn't implement
+    // PartialEq, which limits me as well.
+    match &vl.kind {
+        ErrorKind::WrongParamNumber { expected, received } => {
+            assert_eq!(*expected, ParamNumber::I16);
+            assert_eq!(*received, ParamNumber::I32 as u8);
+        }
+        _ => panic!("Wrong error encountered"),
+    }
+    assert_eq!(vl.position.unwrap(), 0xd0b);
+    let expected = vec![
+        ErrorPathPart::Hash(hash40("hit_target")),
+        ErrorPathPart::Index(0),
+    ];
+    // comparing vec's
+    assert_eq!(vl.path.len(), expected.len());
+    assert!(vl
+        .path
+        .iter()
+        .enumerate()
+        .all(|(i, path)| path == &expected[i]));
+}
+
+#[derive(Debug, Default, PartialEq, Prc)]
+#[prc(path = crate)]
+struct FighterPikachuVlTestError2 {
+    cliff_hang_data: Vec<LedgeGrabBoxtestError2>,
+}
+
+#[derive(Debug, PartialEq, Prc)]
+#[prc(path = crate)]
+struct LedgeGrabBoxtestError2 {
+    p1_x: f32,
+    p1_y: f32,
+    p2_x: f32,
+    fake_name: f32,
+}
+
+#[test]
+fn test_derive_param_not_found_error() {
+    let mut reader = Cursor::new(FIGHTER_PIKACHU_VL);
+    let vl = FighterPikachuVlTestError2::read_file(&mut reader).unwrap_err();
+    // I would use assert_eq! on the vl.kind, but std::io::Error doesn't implement
+    // PartialEq, which limits me as well.
+    match &vl.kind {
+        ErrorKind::ParamNotFound(hash) => {
+            assert_eq!(*hash, hash40("fake_name"));
+        }
+        _ => panic!("Wrong error encountered"),
+    }
+    assert_eq!(vl.position.unwrap(), 0x1071);
+    let expected = vec![
+        ErrorPathPart::Hash(hash40("cliff_hang_data")),
+        ErrorPathPart::Index(0),
+    ];
+    // comparing vec's
+    assert_eq!(vl.path.len(), expected.len());
+    assert!(vl
+        .path
+        .iter()
+        .enumerate()
+        .all(|(i, path)| path == &expected[i]));
 }
