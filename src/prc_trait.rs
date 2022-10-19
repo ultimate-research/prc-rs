@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::io::{Read, Seek, SeekFrom};
 
@@ -132,8 +133,11 @@ impl StructData {
         hash: Hash40,
         offsets: FileOffsets,
     ) -> Result<()> {
-        // TODO: use a binary search instead of a linear one
-        for i in 0..self.len {
+        let mut low = 0;
+        // on a zero length vec, high = -1, which ends the loop
+        let mut high = self.len as i64 - 1;
+        while low <= high {
+            let i = (low + high) / 2;
             reader
                 .seek(SeekFrom::Start(
                     offsets.ref_table + self.ref_offset as u64 + (i as u64 * 8),
@@ -154,11 +158,15 @@ impl StructData {
                 .read_hash40::<LittleEndian>()
                 .map_err(|e| Error::new(e, reader))?;
 
-            if hash == read_hash {
-                reader
-                    .seek(SeekFrom::Start(self.position + (param_offset as u64)))
-                    .map_err(|e| Error::new(e, reader))?;
-                return Ok(());
+            match read_hash.cmp(&hash) {
+                Ordering::Less => low = i + 1,
+                Ordering::Greater => high = i - 1,
+                Ordering::Equal => {
+                    reader
+                        .seek(SeekFrom::Start(self.position + (param_offset as u64)))
+                        .map_err(|e| Error::new(e, reader))?;
+                    return Ok(());
+                }
             }
         }
         Err(Error::new_with_pos(

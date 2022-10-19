@@ -146,7 +146,7 @@ fn test_derive_param_not_found_error() {
     let mut reader = Cursor::new(FIGHTER_PIKACHU_VL);
     let vl = FighterPikachuVlTestError2::read_file(&mut reader).unwrap_err();
     // I would use assert_eq! on the vl.kind, but std::io::Error doesn't implement
-    // PartialEq, which limits me as well.
+    // PartialEq, which removes the easy choice.
     match &vl.kind {
         ErrorKind::ParamNotFound(hash) => {
             assert_eq!(*hash, hash40("fake_name"));
