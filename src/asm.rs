@@ -21,8 +21,14 @@ struct RefEntryWork {
     pub ref_offset: u32,
 }
 
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+enum HashKind {
+    Key,
+    Value,
+}
+
 struct FileData {
-    hashes: IndexSet<Hash40>,
+    hashes: IndexSet<(Hash40, HashKind)>,
     // map of ref-entries to their relative offset
     ref_entries: Vec<RefEntryWork>,
 }
@@ -31,9 +37,14 @@ pub fn assemble<C>(cursor: &mut C, param: &ParamStruct) -> Result<(), Error>
 where
     C: Write + Seek,
 {
-    let mut hashes: IndexSet<Hash40> = IndexSet::new();
+    // Duplicates are counted separately for names and values.
+    // For example, trans and "trans" are counted separately in a flip.prc file.
+    // <hash40 hash="name">trans</hash40>
+    // <hash40 hash="trans">kyz</hash40>
+    // TODO: Some value hashes can appear twice?
+    let mut hashes = IndexSet::new();
     // hash table always starts with 0
-    hashes.insert(Hash40(0));
+    hashes.insert((Hash40(0), HashKind::Value));
 
     // iterate through all params twice, first time only for hashes.
     // this is required in order to assemble the tables 1 - 1.
@@ -56,7 +67,7 @@ where
     let hash_size = 8 * fd.hashes.len() as u32;
     cursor.write_u32::<LittleEndian>(hash_size)?;
     cursor.seek(SeekFrom::Current(4))?;
-    for hash in &fd.hashes {
+    for (hash, _) in &fd.hashes {
         cursor.write_hash40::<LittleEndian>(*hash)?;
     }
 
@@ -76,13 +87,13 @@ where
     Ok(())
 }
 
-fn iter_hashes(list: &mut IndexSet<Hash40>, param: &ParamKind, count: &mut u32) {
+fn iter_hashes(list: &mut IndexSet<(Hash40, HashKind)>, param: &ParamKind, count: &mut usize) {
     match param {
         ParamKind::Str(_) => {
             *count += 1;
         }
         ParamKind::Hash(val) => {
-            list.insert(*val);
+            list.insert((*val, HashKind::Value));
         }
         ParamKind::List(val) => {
             for p in &val.0 {
@@ -97,9 +108,13 @@ fn iter_hashes(list: &mut IndexSet<Hash40>, param: &ParamKind, count: &mut u32) 
     }
 }
 
-fn iter_struct_hashes(list: &mut IndexSet<Hash40>, param_struct: &ParamStruct, count: &mut u32) {
+fn iter_struct_hashes(
+    list: &mut IndexSet<(Hash40, HashKind)>,
+    param_struct: &ParamStruct,
+    count: &mut usize,
+) {
     for (hash, p) in &param_struct.0 {
-        list.insert(*hash);
+        list.insert((*hash, HashKind::Key));
         iter_hashes(list, p, count);
     }
 }
@@ -151,7 +166,7 @@ where
         }
         ParamKind::Hash(val) => {
             param_cursor.write_u8(9)?;
-            param_cursor.write_u32::<LittleEndian>(fd.hashes.get_full(val).unwrap().0 as u32)?;
+            param_cursor.write_u32::<LittleEndian>(fd.hashes.get_index_of(&(*val, HashKind::Value)).unwrap() as u32)?;
             Ok(())
         }
         ParamKind::Str(val) => {
@@ -220,7 +235,7 @@ where
         // TODO: can we preserve the reference to t and iterate at the same time?
         if let RefEntry::RTable(ref mut t) = &mut fd.ref_entries[ref_index].ref_entry {
             t.push((
-                fd.hashes.get_full(hash).unwrap().0 as u32,
+                fd.hashes.get_index_of(&(*hash, HashKind::Key)).unwrap() as u32,
                 param_cursor.seek(SeekFrom::Current(0))? as u32 - start_pos,
             ));
         } else {
