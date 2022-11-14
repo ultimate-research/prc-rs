@@ -11,6 +11,19 @@ pub trait Prc: Sized {
     /// positioned at the start of the param marker before calling this
     fn read_param<R: Read + Seek>(reader: &mut R, offsets: FileOffsets) -> Result<Self>;
 
+    /// Controls how structs should try to behave when reading the param.
+    /// Implementing this manually is usually not necessary, but it can
+    /// be useful in certain cases. For example, [Option] types work by
+    /// returning [None] when the hash isn't found in the struct.
+    fn read_from_struct<R: Read + Seek>(
+        reader: &mut R,
+        hash: Hash40,
+        offsets: FileOffsets,
+        struct_data: StructData,
+    ) -> Result<Self> {
+        struct_data.read_child(reader, hash, offsets)
+    }
+
     /// A blanket implementation which reads the entire file to create
     /// Self. The reader should be at the beginning of the file before
     /// calling this.
@@ -43,7 +56,7 @@ pub enum ErrorKind {
 
 /// Used for the path of an error. Could be a hash (for structs) or
 /// an index (for a list)
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorPathPart {
     Index(u32),
     Hash(Hash40),
@@ -67,7 +80,7 @@ pub struct StructData {
 
 /// The number associated with each type of param in a file
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamNumber {
     Bool = 1,
     I8,
@@ -358,6 +371,28 @@ impl<T: Prc> Prc for Vec<T> {
         }
 
         Ok(list)
+    }
+}
+
+impl<T: Prc> Prc for Option<T> {
+    fn read_param<R: Read + Seek>(_: &mut R, _: FileOffsets) -> Result<Self> {
+        unimplemented!("Option's should be read only by using the `read_from_struct` method")
+    }
+
+    fn read_from_struct<R: Read + Seek>(
+        reader: &mut R,
+        hash: Hash40,
+        offsets: FileOffsets,
+        struct_data: StructData,
+    ) -> Result<Self> {
+        struct_data
+            .search_child(reader, hash, offsets)
+            .and_then(|_| T::read_param(reader, offsets))
+            .map(|param| Some(param))
+            .or_else(|err| match &err.kind {
+                ErrorKind::ParamNotFound(_) => Ok(None),
+                _ => Err(err),
+            })
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::prc_trait::{ErrorKind, ErrorPathPart, ParamNumber};
-use crate::Prc;
+use crate::{write_stream, ParamKind, ParamStruct, Prc};
 
 use std::io::Cursor;
 
@@ -165,4 +165,39 @@ fn test_derive_param_not_found_error() {
         .iter()
         .enumerate()
         .all(|(i, path)| path == &expected[i]));
+}
+
+#[derive(Debug, Prc, PartialEq, Eq)]
+#[prc(path = crate)]
+struct OptionalTestStruct {
+    required_field: u8,
+    optional_field: Option<bool>,
+}
+
+#[test]
+fn test_optional_param() {
+    let param_present = ParamStruct(vec![
+        (hash40("required_field"), ParamKind::U8(0)),
+        (hash40("optional_field"), ParamKind::Bool(true)),
+    ]);
+    let param_missing = ParamStruct(vec![
+        (hash40("required_field"), ParamKind::U8(1))
+    ]);
+
+    let mut file_present = Cursor::new(vec![]);
+    write_stream(&mut file_present, &param_present).unwrap();
+    file_present.set_position(0);
+
+    let mut file_missing = Cursor::new(vec![]);
+    write_stream(&mut file_missing, &param_missing).unwrap();
+    file_missing.set_position(0);
+
+    let data_present = OptionalTestStruct::read_file(&mut file_present).unwrap();
+    let data_missing = OptionalTestStruct::read_file(&mut file_missing).unwrap();
+
+    assert_eq!(data_present.required_field, 0);
+    assert_eq!(data_present.optional_field, Some(true));
+
+    assert_eq!(data_missing.required_field, 1);
+    assert_eq!(data_missing.optional_field, None);
 }
